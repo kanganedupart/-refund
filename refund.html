@@ -27,6 +27,28 @@
 html,body{font-family:'Pretendard Variable',Pretendard,-apple-system,BlinkMacSystemFont,sans-serif}
 body{background:var(--bg);color:var(--text);font-size:14px;min-height:100vh;line-height:1.5}
 
+/* ⭐ 로그인 화면 */
+.login-screen{position:fixed;inset:0;z-index:99999;background:linear-gradient(135deg,#0f766e 0%,#134e4a 100%);display:flex;align-items:center;justify-content:center;padding:20px}
+.login-box{background:white;border-radius:14px;padding:32px 36px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,0.3)}
+.login-brand{font-size:20px;font-weight:800;color:var(--primary-dark);text-align:center;margin-bottom:4px}
+.login-sub{font-size:13px;color:var(--text-muted);text-align:center;margin-bottom:24px}
+.login-form{display:flex;flex-direction:column;gap:14px}
+.login-field{display:flex;flex-direction:column;gap:5px}
+.login-field label{font-size:12.5px;font-weight:600;color:var(--text)}
+.login-hint{font-size:10.5px;color:var(--text-muted);font-weight:400;margin-left:4px}
+.login-field input{padding:10px 12px;border:1.5px solid var(--border);border-radius:7px;font-size:14px;font-family:inherit;transition:border-color 0.15s}
+.login-field input:focus{outline:none;border-color:var(--primary)}
+.login-error{padding:8px 12px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;color:#991b1b;font-size:12.5px;font-weight:500}
+.login-btn{padding:11px;background:var(--primary);color:white;border:none;border-radius:7px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:4px;transition:background 0.15s}
+.login-btn:hover{background:var(--primary-dark)}
+.login-foot{margin-top:18px;padding-top:14px;border-top:1px dashed var(--border);font-size:11.5px;color:var(--text-muted);text-align:center;line-height:1.6}
+/* 로그인 후 → 로그인 화면 숨김 */
+body.logged-in .login-screen{display:none}
+/* 로그인 안 됐을 땐 본문 가림 */
+body:not(.logged-in) > .header,
+body:not(.logged-in) > .content,
+body:not(.logged-in) > div:not(#loginScreen):not(.toast-container){display:none !important}
+
 /* 헤더 */
 .header{background:white;border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:58px;position:sticky;top:0;z-index:100}
 .brand{font-size:18px;font-weight:800;color:var(--text)}
@@ -688,6 +710,30 @@ body.role-starter [data-need-role="chief"].is-on{cursor:default;pointer-events:n
 </head>
 <body>
 
+<!-- ⭐ 로그인 화면 (전체 가림) -->
+<div id="loginScreen" class="login-screen">
+  <div class="login-box">
+    <div class="login-brand">강안교육 환불관리</div>
+    <div class="login-sub">직원 로그인</div>
+    <form class="login-form" onsubmit="event.preventDefault();doLogin()">
+      <div class="login-field">
+        <label>아이디 <span class="login-hint">(직원 실명 / 어드민은 "admin")</span></label>
+        <input type="text" id="loginId" autocomplete="username" placeholder="예: 김지유" autofocus />
+      </div>
+      <div class="login-field">
+        <label>비밀번호 <span class="login-hint">(초기 비번: 0000)</span></label>
+        <input type="password" id="loginPw" autocomplete="current-password" placeholder="••••" />
+      </div>
+      <div id="loginError" class="login-error" style="display:none"></div>
+      <button type="submit" class="login-btn">로그인</button>
+    </form>
+    <div class="login-foot">
+      처음 로그인하는 직원은 비밀번호 <b>0000</b><br>
+      로그인 후 헤더의 [내 비번] 에서 변경하세요
+    </div>
+  </div>
+</div>
+
 <div class="header">
   <div style="display:flex;align-items:center;gap:18px">
     <div>
@@ -707,6 +753,35 @@ body.role-starter [data-need-role="chief"].is-on{cursor:default;pointer-events:n
     <select id="currentStaff" onchange="setCurrentStaff(this.value)" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:inherit;background:white;font-weight:600;color:var(--primary-dark)">
       <!-- 옵션은 동적 생성 -->
     </select>
+    <button onclick="openChangePasswordModal()" title="내 비밀번호 변경" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:11.5px;font-family:inherit;background:white;cursor:pointer;color:var(--text)">🔒 내 비번</button>
+    <button onclick="if(confirm('로그아웃 하시겠어요?')) logout()" title="로그아웃" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:11.5px;font-family:inherit;background:white;cursor:pointer;color:var(--text)">⎋ 로그아웃</button>
+  </div>
+</div>
+
+<!-- 비번 변경 모달 -->
+<div id="pwChangeModal" class="login-screen" style="display:none;background:rgba(0,0,0,0.5)">
+  <div class="login-box">
+    <div class="login-brand">비밀번호 변경</div>
+    <div class="login-sub" id="pwChangeWho">—</div>
+    <form class="login-form" onsubmit="event.preventDefault();doChangePassword()">
+      <div class="login-field">
+        <label>현재 비밀번호</label>
+        <input type="password" id="pwOld" autocomplete="current-password" />
+      </div>
+      <div class="login-field">
+        <label>새 비밀번호 <span class="login-hint">(4자 이상)</span></label>
+        <input type="password" id="pwNew" autocomplete="new-password" />
+      </div>
+      <div class="login-field">
+        <label>새 비밀번호 확인</label>
+        <input type="password" id="pwNewConfirm" autocomplete="new-password" />
+      </div>
+      <div id="pwChangeError" class="login-error" style="display:none"></div>
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button type="button" onclick="closeChangePasswordModal()" style="flex:1;padding:11px;background:#f5f5f0;border:none;border-radius:7px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">취소</button>
+        <button type="submit" class="login-btn" style="flex:1;margin-top:0">변경</button>
+      </div>
+    </form>
   </div>
 </div>
 
@@ -1767,6 +1842,108 @@ function tryUnlockAdmin(pw){
 }
 function lockAdmin(){
   adminUnlocked = false;
+}
+
+// ⭐ 로그인 시스템 (환불 독자적, localStorage 저장)
+// 직원 비번 저장 위치: localStorage 'refund_v1_staffPw' = { [실명]: 'hash해시값' }
+// 세션 저장 위치: sessionStorage 'refund_v1_session' = 실명
+// 초기 비번: 0000 (모든 새 직원)
+const LS_STAFF_PW = 'refund_v1_staffPw';
+const SS_SESSION = 'refund_v1_session';
+const DEFAULT_PASSWORD = '0000';
+
+// 간단한 해시 (보안 강화는 Firebase Auth 시 처리 — 지금은 평문 노출 방지 수준)
+function hashPw(pw){
+  let h = 0;
+  const s = 'refund_' + pw + '_v1';
+  for(let i=0; i<s.length; i++){
+    h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+  }
+  return 'h' + Math.abs(h).toString(36);
+}
+
+function getStaffPasswords(){
+  try {
+    const raw = localStorage.getItem(LS_STAFF_PW);
+    return raw ? JSON.parse(raw) : {};
+  } catch(e){ return {}; }
+}
+
+function saveStaffPasswords(pwMap){
+  localStorage.setItem(LS_STAFF_PW, JSON.stringify(pwMap));
+}
+
+// 직원 추가 시 자동 호출 — 비번 없으면 0000으로 설정
+function ensureStaffPassword(staffName){
+  if(!staffName) return;
+  const map = getStaffPasswords();
+  if(!map[staffName]){
+    map[staffName] = hashPw(DEFAULT_PASSWORD);
+    saveStaffPasswords(map);
+  }
+}
+
+// 로그인 시도
+function tryLogin(staffName, pw){
+  if(!staffName || !pw) return { ok: false, reason: '아이디와 비밀번호를 입력해주세요' };
+  // 어드민 로그인
+  if(staffName === 'admin'){
+    if(pw === ADMIN_PASSWORD){
+      adminUnlocked = true;
+      sessionStorage.setItem(SS_SESSION, 'admin');
+      return { ok: true, role: 'admin', name: 'admin' };
+    }
+    return { ok: false, reason: '어드민 비밀번호가 틀려요' };
+  }
+  // 직원 로그인
+  const map = getStaffPasswords();
+  if(!map[staffName]){
+    return { ok: false, reason: '등록되지 않은 직원이에요' };
+  }
+  if(map[staffName] !== hashPw(pw)){
+    return { ok: false, reason: '비밀번호가 틀려요' };
+  }
+  sessionStorage.setItem(SS_SESSION, staffName);
+  return { ok: true, role: getStaffRole(staffName), name: staffName };
+}
+
+function logout(){
+  adminUnlocked = false;
+  sessionStorage.removeItem(SS_SESSION);
+  location.reload();
+}
+
+function getCurrentSession(){
+  return sessionStorage.getItem(SS_SESSION) || null;
+}
+
+// 비밀번호 변경
+function changeMyPassword(oldPw, newPw){
+  const sess = getCurrentSession();
+  if(!sess || sess === 'admin'){
+    return { ok: false, reason: '직원 계정만 비번 변경 가능 (어드민은 별도)' };
+  }
+  const map = getStaffPasswords();
+  if(map[sess] !== hashPw(oldPw)){
+    return { ok: false, reason: '현재 비밀번호가 틀려요' };
+  }
+  if(!newPw || newPw.length < 4){
+    return { ok: false, reason: '새 비밀번호는 4자 이상이에요' };
+  }
+  map[sess] = hashPw(newPw);
+  saveStaffPasswords(map);
+  return { ok: true };
+}
+
+// 어드민이 직원 비번 초기화 (0000으로)
+function resetStaffPassword(staffName){
+  if(!adminUnlocked && currentRole() !== 'admin' && currentRole() !== 'starter_manager'){
+    return { ok: false, reason: '권한 없음' };
+  }
+  const map = getStaffPasswords();
+  map[staffName] = hashPw(DEFAULT_PASSWORD);
+  saveStaffPasswords(map);
+  return { ok: true };
 }
 let students = {}; // {이름or학번: {name, studentId, holder, bank, account}}
 let archive = [];
@@ -8220,9 +8397,11 @@ function addStaff(){
   STAFF_ROLES[v] = role;
   if(!settings.staffRoles) settings.staffRoles = {};
   settings.staffRoles[v] = role;
+  // ⭐ 새 직원 비번 자동 0000으로 설정
+  ensureStaffPassword(v);
   inp.value = '';
   saveSettings();
-  toast(`${v} 추가됨 (${roleLabel(role).text})`);
+  toast(`${v} 추가됨 (${roleLabel(role).text}) — 초기 비번: 0000`);
   renderStaffSettings();
   renderStaffFilter();
   renderCurrentStaff();
@@ -9388,19 +9567,119 @@ document.addEventListener('keydown', function(e){
   if(e.key==='Escape' && document.getElementById('addModal').classList.contains('active')) closeAddModal();
 });
 
-load();
-// 시작 시 기본 = 미완료 무통장 (시연/일상 시작점)
-stageFilter = 'pendingMo';
-bizFilter = 'all';
-syncDetailFromChips();
-renderStaffFilter();
-renderCurrentStaff();
-applyRolePermissions();
-refreshFilterChips();
-refreshGroupChips();
-updateFilterBadge();
-rebuildStageSnapshot();  // ⭐ 초기 스냅샷
-render();
+// ⭐ 비밀번호 변경 모달
+function openChangePasswordModal(){
+  const sess = getCurrentSession();
+  if(!sess){ toast('로그인 정보 없음'); return; }
+  if(sess === 'admin'){
+    toast('어드민 비번은 코드에 고정 (3500) — 별도 변경 불가');
+    return;
+  }
+  document.getElementById('pwChangeWho').textContent = sess + ' 직원';
+  document.getElementById('pwOld').value = '';
+  document.getElementById('pwNew').value = '';
+  document.getElementById('pwNewConfirm').value = '';
+  document.getElementById('pwChangeError').style.display = 'none';
+  document.getElementById('pwChangeModal').style.display = 'flex';
+  setTimeout(() => document.getElementById('pwOld').focus(), 100);
+}
+
+function closeChangePasswordModal(){
+  document.getElementById('pwChangeModal').style.display = 'none';
+}
+
+function doChangePassword(){
+  const oldPw = document.getElementById('pwOld').value;
+  const newPw = document.getElementById('pwNew').value;
+  const confirm = document.getElementById('pwNewConfirm').value;
+  const errBox = document.getElementById('pwChangeError');
+  errBox.style.display = 'none';
+  if(newPw !== confirm){
+    errBox.textContent = '새 비밀번호와 확인이 일치하지 않아요';
+    errBox.style.display = 'block';
+    return;
+  }
+  const result = changeMyPassword(oldPw, newPw);
+  if(!result.ok){
+    errBox.textContent = result.reason;
+    errBox.style.display = 'block';
+    return;
+  }
+  closeChangePasswordModal();
+  toast('✓ 비밀번호 변경 완료');
+}
+
+// ⭐ 로그인 처리 함수
+function doLogin(){
+  const id = document.getElementById('loginId').value.trim();
+  const pw = document.getElementById('loginPw').value;
+  const errBox = document.getElementById('loginError');
+  const result = tryLogin(id, pw);
+  if(!result.ok){
+    errBox.textContent = result.reason;
+    errBox.style.display = 'block';
+    return;
+  }
+  // 로그인 성공
+  errBox.style.display = 'none';
+  // currentStaff 설정 (어드민이면 'admin', 직원이면 본인 실명)
+  if(result.role === 'admin'){
+    currentStaff = settings.staff && settings.staff[0] ? settings.staff[0] : '관리자';
+  } else {
+    currentStaff = result.name;
+  }
+  // 로그인 화면 숨기고 본문 표시
+  document.body.classList.add('logged-in');
+  // 초기 렌더 진행
+  initAfterLogin();
+}
+
+// 로그인 후 초기화 (load + render)
+function initAfterLogin(){
+  if(window._appInitialized) return;
+  window._appInitialized = true;
+  load();
+  // 모든 등록 직원에게 기본 비번 0000 자동 설정 (처음 사용 시)
+  if(settings.staff && Array.isArray(settings.staff)){
+    settings.staff.forEach(name => ensureStaffPassword(name));
+  }
+  stageFilter = 'pendingMo';
+  bizFilter = 'all';
+  syncDetailFromChips();
+  renderStaffFilter();
+  renderCurrentStaff();
+  applyRolePermissions();
+  refreshFilterChips();
+  refreshGroupChips();
+  updateFilterBadge();
+  rebuildStageSnapshot();
+  render();
+}
+
+// 시작 시 세션 체크 — 이미 로그인된 상태면 자동 통과
+(function checkSession(){
+  const sess = getCurrentSession();
+  if(!sess){
+    // 비로그인 → 로그인 화면 보임 (CSS가 처리)
+    return;
+  }
+  // 세션 있음 — 어드민이든 직원이든 자동 로그인 처리
+  if(sess === 'admin'){
+    adminUnlocked = true;
+  }
+  // currentStaff는 load() 후 보정 — initAfterLogin에서
+  document.body.classList.add('logged-in');
+  // 직원 세션이면 currentStaff에 반영하기 위해 짧은 대기 후 처리
+  setTimeout(() => {
+    if(sess !== 'admin'){
+      currentStaff = sess;
+    }
+    initAfterLogin();
+  }, 0);
+})();
+
+// ⭐ load() + render()는 위 IIFE의 checkSession이 호출함 (initAfterLogin)
+// 비로그인이면 로그인 화면만 표시, 데이터 로드 안 함
 
 // ============================================================
 // 디버그 헬퍼 (F12 콘솔에서 호출)
