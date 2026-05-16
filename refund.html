@@ -707,6 +707,22 @@ body.role-starter [data-need-role="chief"].is-on{cursor:default;pointer-events:n
   .form-row-2,.form-row-3{grid-template-columns:1fr}
 }
 </style>
+
+<!-- ⭐ Firebase SDK (사장님 설정) -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script>
+firebase.initializeApp({
+  apiKey: "AIzaSyBIcLrQsEJGmFeikWc4afibUhlWBQkaENw",
+  authDomain: "refund-book.firebaseapp.com",
+  databaseURL: "https://refund-book-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "refund-book",
+  storageBucket: "refund-book.firebasestorage.app",
+  messagingSenderId: "675243179974",
+  appId: "1:675243179974:web:2b7a3d7161ccfc65e73cc7"
+});
+console.log('[Firebase] 초기화 완료 — Realtime DB URL:', firebase.database().ref().toString());
+</script>
 </head>
 <body>
 
@@ -7887,77 +7903,108 @@ function isInitialQuery(q){
 let _firebaseStudentCache = null;
 let _firebaseStudentCacheAt = 0;
 async function getFirebaseStudents(){
+  console.log('[students] getFirebaseStudents 호출됨');
   // 5분 이내면 캐시 사용
   if(_firebaseStudentCache && (Date.now() - _firebaseStudentCacheAt < 5*60*1000)){
+    console.log('[students] 캐시 사용 (', _firebaseStudentCache.length, '명)');
     return _firebaseStudentCache;
   }
   if(typeof firebase === 'undefined' || !firebase.database){
-    return null;  // Firebase 미초기화 → null
+    console.warn('[students] ❌ Firebase 미초기화 — typeof firebase:', typeof firebase, '/ firebase.database:', typeof firebase !== 'undefined' ? typeof firebase.database : 'N/A');
+    return null;
   }
+  console.log('[students] Firebase 초기화 OK — shared/students 읽기 시작...');
   try {
-    // ⭐ 경로: shared/students (학생 명단 전용, 교재 미배부와 분리)
-    // 데이터 구조 예: { "김지유": {...}, "노현지": {...}, ... }
-    // Object.keys()로 이름 추출 — 값 구조 무관하게 동작
     const snap = await firebase.database().ref('shared/students').once('value');
     const data = snap.val();
-    if(!data) return [];
+    console.log('[students] Firebase 응답 도착, data =', data);
+    if(!data){
+      console.warn('[students] ❌ shared/students 경로에 데이터 없음 (null) — 교재 프로그램에서 학생을 먼저 등록하세요');
+      return [];
+    }
     const names = Object.keys(data);
+    console.log('[students] ✓ 학생', names.length, '명 발견:', names.slice(0, 10).join(', '), names.length > 10 ? '...' : '');
     const list = names.map(name => {
       const info = data[name] || {};
       return {
         name,
         studentId: (typeof info === 'object' && info.studentId) ? info.studentId : '',
-        // 검색용 추가 필드
         initials: extractInitials(name),
         lowerName: name.toLowerCase()
       };
     });
     _firebaseStudentCache = list;
     _firebaseStudentCacheAt = Date.now();
+    console.log('[students] 캐시 저장 완료');
     return list;
   } catch(e){
-    console.error('Firebase 학생 목록 읽기 실패:', e);
+    console.error('[students] ❌ Firebase 읽기 실패:', e);
+    console.error('  에러 코드:', e.code);
+    console.error('  에러 메시지:', e.message);
     return null;
   }
 }
 
 async function searchStudent(){
-  const rawQ = document.getElementById('fName').value.trim();
+  const fNameInp = document.getElementById('fName');
   const list = document.getElementById('searchList');
-  if(!rawQ){ list.classList.remove('show'); return; }
+  if(!fNameInp){
+    console.warn('[search] ❌ #fName 입력 못 찾음 (모달이 열려있지 않을 수 있음)');
+    return;
+  }
+  if(!list){
+    console.warn('[search] ❌ #searchList 드롭다운 컨테이너 못 찾음');
+    return;
+  }
+  const rawQ = fNameInp.value.trim();
+  console.log('[search] searchStudent 호출 — 입력값:', JSON.stringify(rawQ));
+  // ⭐ 빈 칸이어도 Firebase 학생 목록은 표시 (포커스만 줘도 드롭다운)
+  // 단 로컬에서 빈 검색은 의미 없으니 빈 학생 목록으로 처리
   const q = rawQ.toLowerCase();
   const isInitial = isInitialQuery(rawQ);
+  console.log('[search] 초성 모드:', isInitial);
 
-  // 1) 로컬 학생 (이미 환불 입력해서 students에 저장된 학생) — 즉시 결과
-  const localMatches = Object.values(students).filter(s => {
+  // 1) 로컬 학생 (이미 환불 입력해서 students에 저장된 학생)
+  const allLocal = Object.values(students);
+  console.log('[search] 로컬 students 수:', allLocal.length);
+  const localMatches = rawQ ? allLocal.filter(s => {
     if(isInitial){
-      // 초성 검색
       return extractInitials(s.name||'').includes(rawQ);
     }
     return (s.name||'').toLowerCase().includes(q) || (s.studentId||'').toLowerCase().includes(q);
-  });
+  }) : allLocal.slice(0, 6);  // 빈 검색이면 첫 6명
+  console.log('[search] 로컬 매칭:', localMatches.length);
 
   // 일단 로컬 결과로 먼저 표시 (Firebase는 비동기)
   renderSearchList(list, localMatches, [], rawQ, isInitial);
 
-  // 2) Firebase 학생 (bookUnissued에 있는 학생) — 비동기, 캐시 사용
+  // 2) Firebase 학생
   const fbStudents = await getFirebaseStudents();
-  if(!fbStudents) return;  // Firebase 미설정이면 로컬 결과만
+  if(!fbStudents){
+    console.warn('[search] Firebase 결과 없음 (미초기화 또는 에러) — 로컬만 표시');
+    return;
+  }
+  console.log('[search] Firebase 학생', fbStudents.length, '명 받음');
 
-  // 현재 입력값이 그동안 바뀌었으면 (사장님이 계속 타이핑) 무시
-  const currentQ = document.getElementById('fName').value.trim();
-  if(currentQ !== rawQ) return;
+  // 현재 입력값이 그동안 바뀌었으면 무시
+  const currentQ = fNameInp.value.trim();
+  if(currentQ !== rawQ){
+    console.log('[search] 입력값 변경됨 (그 사이 사장님이 더 타이핑) — 결과 무시');
+    return;
+  }
 
-  const fbMatches = fbStudents.filter(s => {
+  const fbMatches = rawQ ? fbStudents.filter(s => {
     if(isInitial){
       return s.initials.includes(rawQ);
     }
     return s.lowerName.includes(q) || (s.studentId||'').toLowerCase().includes(q);
-  });
+  }) : fbStudents.slice(0, 6);  // 빈 검색이면 첫 6명
+  console.log('[search] Firebase 매칭:', fbMatches.length);
 
   // 로컬 + Firebase 합쳐서 표시 (중복 제거)
   const localNames = new Set(localMatches.map(s => s.name));
   const fbOnly = fbMatches.filter(s => !localNames.has(s.name));
+  console.log('[search] Firebase 전용 (로컬 중복 제거 후):', fbOnly.length);
   renderSearchList(list, localMatches, fbOnly, rawQ, isInitial);
 }
 
