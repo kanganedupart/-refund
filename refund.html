@@ -7,6 +7,26 @@
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="stylesheet" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"/>
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.x.x/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.x.x/firebase-database-compat.js"></script>
+<script>
+// Firebase 설정
+const firebaseConfig = {
+  apiKey: "AIzaSyBIcLrQsEJGmFeikWc4afibUhlWBQkaENw",
+  authDomain: "refund-book.firebaseapp.com",
+  databaseURL: "https://refund-book-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "refund-book",
+  storageBucket: "refund-book.firebasestorage.app",
+  messagingSenderId: "675243179974",
+  appId: "1:675243179974:web:2b7a3d7161ccfc65e73cc7"
+};
+// Firebase 초기화
+firebase.initializeApp(firebaseConfig);
+console.log('✅ Firebase 초기화 완료');
+</script>
+
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
