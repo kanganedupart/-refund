@@ -2195,11 +2195,31 @@ function showSpecial(){
 function renderCurrentStaff(){
   const sel = document.getElementById('currentStaff');
   if(!sel) return;
+  // ⭐ 로그인 세션 기준으로 자동 설정 + 잠금
+  const sess = getCurrentSession();
+  if(sess === 'admin'){
+    // 어드민 → "admin" 표시, 다른 직원 선택 불가
+    currentStaff = 'admin';
+    sel.innerHTML = `<option value="admin" selected>🛡️ admin (관리자)</option>`;
+    sel.disabled = true;
+    sel.title = '어드민으로 로그인됨 — 환불 작성 시 "admin"으로 기록';
+    return;
+  }
+  // 직원 → 본인만 표시, 잠금
+  if(sess){
+    currentStaff = sess;
+    const role = STAFF_ROLES[sess] || 'starter_normal';
+    const roleLabel = role === 'starter_normal' ? '일반' : role === 'starter_manager' ? '관리자' : role === 'clerk' ? '총무' : '';
+    sel.innerHTML = `<option value="${sess}" selected>${sess}${roleLabel ? ' ('+roleLabel+')' : ''}</option>`;
+    sel.disabled = true;
+    sel.title = '로그인된 본인으로 자동 기록';
+    return;
+  }
+  // 세션 없으면 (구버전 호환) → 기존 로직
   const list = settings.staff || [];
   if(!list.includes(currentStaff) && list.length > 0){
     currentStaff = list[0];
   }
-  // 권한별 짧은 라벨
   const shortLabel = (s) => {
     const r = STAFF_ROLES[s] || 'starter_normal';
     if(r === 'starter_normal') return ' (일반)';
@@ -2210,6 +2230,7 @@ function renderCurrentStaff(){
   sel.innerHTML = list.map(s => 
     `<option value="${s}" ${s===currentStaff?'selected':''}>${s}${shortLabel(s)}</option>`
   ).join('');
+  sel.disabled = false;
 }
 
 function setCurrentStaff(s){
@@ -9622,9 +9643,10 @@ function doLogin(){
   }
   // 로그인 성공
   errBox.style.display = 'none';
-  // currentStaff 설정 (어드민이면 'admin', 직원이면 본인 실명)
+  // ⭐ currentStaff = 로그인한 사람 그대로 (어드민이면 'admin', 직원이면 본인 실명)
+  // 환불 입력 시 r.staff에 이 값 그대로 기록됨 → 누가 입력했는지 정확히 추적
   if(result.role === 'admin'){
-    currentStaff = settings.staff && settings.staff[0] ? settings.staff[0] : '관리자';
+    currentStaff = 'admin';
   } else {
     currentStaff = result.name;
   }
@@ -9669,9 +9691,11 @@ function initAfterLogin(){
   }
   // currentStaff는 load() 후 보정 — initAfterLogin에서
   document.body.classList.add('logged-in');
-  // 직원 세션이면 currentStaff에 반영하기 위해 짧은 대기 후 처리
+  // ⭐ 세션 직원/어드민에 따라 currentStaff 설정
   setTimeout(() => {
-    if(sess !== 'admin'){
+    if(sess === 'admin'){
+      currentStaff = 'admin';
+    } else {
       currentStaff = sess;
     }
     initAfterLogin();
