@@ -7,26 +7,6 @@
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="stylesheet" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"/>
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
-
-<!-- Firebase SDK -->
-<script src="https://www.gstatic.com/firebasejs/9.x.x/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.x.x/firebase-database-compat.js"></script>
-<script>
-// Firebase 설정
-const firebaseConfig = {
-  apiKey: "AIzaSyBIcLrQsEJGmFeikWc4afibUhlWBQkaENw",
-  authDomain: "refund-book.firebaseapp.com",
-  databaseURL: "https://refund-book-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "refund-book",
-  storageBucket: "refund-book.firebasestorage.app",
-  messagingSenderId: "675243179974",
-  appId: "1:675243179974:web:2b7a3d7161ccfc65e73cc7"
-};
-// Firebase 초기화
-firebase.initializeApp(firebaseConfig);
-console.log('✅ Firebase 초기화 완료');
-</script>
-
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -7675,30 +7655,164 @@ function pickBank(name){
   if(acc) acc.focus();
 }
 
-function searchStudent(){
-  const q = document.getElementById('fName').value.trim().toLowerCase();
+// ⭐ 한글 초성 추출 (사장님 요청: ㄱㅈㅇ → 김지유 매칭)
+const HANGUL_INITIALS = ['ㄱ','ㄲ','ㄴ','ㄷ','ㄸ','ㄹ','ㅁ','ㅂ','ㅃ','ㅅ','ㅆ','ㅇ','ㅈ','ㅉ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
+function extractInitials(str){
+  let result = '';
+  for(const ch of (str || '')){
+    const code = ch.charCodeAt(0);
+    // 한글 음절 (가 ~ 힣)
+    if(code >= 0xAC00 && code <= 0xD7A3){
+      const initialIdx = Math.floor((code - 0xAC00) / 588);
+      result += HANGUL_INITIALS[initialIdx];
+    } else if(HANGUL_INITIALS.includes(ch)){
+      // 이미 초성 문자
+      result += ch;
+    } else {
+      // 그 외 (영문, 숫자 등) → 그대로
+      result += ch;
+    }
+  }
+  return result;
+}
+
+// 검색어가 모두 초성으로만 이뤄졌는지 (예: "ㄱㅈㅇ")
+function isInitialQuery(q){
+  if(!q) return false;
+  for(const ch of q){
+    if(!HANGUL_INITIALS.includes(ch)) return false;
+  }
+  return true;
+}
+
+// ⭐ Firebase 학생 목록 캐시 (한 번 가져오고 5분간 재사용)
+let _firebaseStudentCache = null;
+let _firebaseStudentCacheAt = 0;
+async function getFirebaseStudents(){
+  // 5분 이내면 캐시 사용
+  if(_firebaseStudentCache && (Date.now() - _firebaseStudentCacheAt < 5*60*1000)){
+    return _firebaseStudentCache;
+  }
+  if(typeof firebase === 'undefined' || !firebase.database){
+    return null;  // Firebase 미초기화 → null
+  }
+  try {
+    const snap = await firebase.database().ref('shared/bookUnissued').once('value');
+    const data = snap.val();
+    if(!data) return [];
+    // 이름 + 학번 등 추출 (Firebase 데이터 구조에 맞춰)
+    // bookUnissued = { "김지유": {total, books, studentId?}, ... }
+    const list = Object.entries(data).map(([name, info]) => ({
+      name,
+      studentId: info.studentId || '',
+      // 검색용 추가 필드
+      initials: extractInitials(name),
+      lowerName: name.toLowerCase()
+    }));
+    _firebaseStudentCache = list;
+    _firebaseStudentCacheAt = Date.now();
+    return list;
+  } catch(e){
+    console.error('Firebase 학생 목록 읽기 실패:', e);
+    return null;
+  }
+}
+
+async function searchStudent(){
+  const rawQ = document.getElementById('fName').value.trim();
   const list = document.getElementById('searchList');
-  if(!q){ list.classList.remove('show'); return; }
-  const matches = Object.values(students).filter(s =>
-    (s.name||'').toLowerCase().includes(q) || (s.studentId||'').toLowerCase().includes(q)
-  ).slice(0, 8);
-  if(matches.length===0){
+  if(!rawQ){ list.classList.remove('show'); return; }
+  const q = rawQ.toLowerCase();
+  const isInitial = isInitialQuery(rawQ);
+
+  // 1) 로컬 학생 (이미 환불 입력해서 students에 저장된 학생) — 즉시 결과
+  const localMatches = Object.values(students).filter(s => {
+    if(isInitial){
+      // 초성 검색
+      return extractInitials(s.name||'').includes(rawQ);
+    }
+    return (s.name||'').toLowerCase().includes(q) || (s.studentId||'').toLowerCase().includes(q);
+  });
+
+  // 일단 로컬 결과로 먼저 표시 (Firebase는 비동기)
+  renderSearchList(list, localMatches, [], rawQ, isInitial);
+
+  // 2) Firebase 학생 (bookUnissued에 있는 학생) — 비동기, 캐시 사용
+  const fbStudents = await getFirebaseStudents();
+  if(!fbStudents) return;  // Firebase 미설정이면 로컬 결과만
+
+  // 현재 입력값이 그동안 바뀌었으면 (사장님이 계속 타이핑) 무시
+  const currentQ = document.getElementById('fName').value.trim();
+  if(currentQ !== rawQ) return;
+
+  const fbMatches = fbStudents.filter(s => {
+    if(isInitial){
+      return s.initials.includes(rawQ);
+    }
+    return s.lowerName.includes(q) || (s.studentId||'').toLowerCase().includes(q);
+  });
+
+  // 로컬 + Firebase 합쳐서 표시 (중복 제거)
+  const localNames = new Set(localMatches.map(s => s.name));
+  const fbOnly = fbMatches.filter(s => !localNames.has(s.name));
+  renderSearchList(list, localMatches, fbOnly, rawQ, isInitial);
+}
+
+// 학생 검색 결과 렌더링 (로컬 + Firebase 합쳐서)
+function renderSearchList(list, localMatches, fbOnly, rawQ, isInitial){
+  const all = [...localMatches.slice(0, 6), ...fbOnly.slice(0, 6)];
+  if(all.length === 0){
     list.innerHTML = `<div class="search-item search-empty" style="cursor:default;color:var(--text-muted);font-size:12px;background:#fafaf8">
       <div style="display:flex;align-items:center;gap:8px">
         <span style="font-size:14px">📝</span>
         <div>
           <div style="font-weight:600;color:var(--text)">처음 보는 학생이에요</div>
-          <div style="font-size:11px;margin-top:2px">아래 칸에 정보 입력하면 저장돼서 다음부턴 자동으로 떠요</div>
+          <div style="font-size:11px;margin-top:2px">아래 칸에 정보 입력하면 저장돼서 다음부턴 자동으로 떠요${isInitial ? ' (초성 검색 결과 없음)' : ''}</div>
         </div>
       </div>
     </div>`;
     list.classList.add('show');
     return;
   }
-  list.innerHTML = matches.map(s => `<div class="search-item" onclick="pickStudent('${s.key}')">
-    <b>${s.name}</b><span class="small">${s.holder||''} ${s.bank||''} ${s.account||''}</span>
-  </div>`).join('');
+  let html = '';
+  // 로컬 학생 (계좌 정보 있음)
+  localMatches.slice(0, 6).forEach(s => {
+    html += `<div class="search-item" onclick="pickStudent('${s.key}')">
+      <b>${s.name}</b><span class="small">${s.holder||''} ${s.bank||''} ${s.account||''}</span>
+    </div>`;
+  });
+  // 구분선
+  if(localMatches.length > 0 && fbOnly.length > 0){
+    html += `<div style="padding:4px 10px;font-size:10.5px;color:#9ca3af;background:#fafaf8;border-top:1px dashed #e5e5e0">📚 교재 시스템에 있는 학생 (계좌 정보 없음)</div>`;
+  } else if(localMatches.length === 0 && fbOnly.length > 0){
+    html += `<div style="padding:4px 10px;font-size:10.5px;color:#9ca3af;background:#fafaf8">📚 교재 시스템에서 가져옴 (계좌 정보 없음 — 입력 후 저장하면 다음엔 자동으로 떠요)</div>`;
+  }
+  // Firebase 학생 (이름만, 계좌 정보 없음)
+  fbOnly.slice(0, 6).forEach(s => {
+    const safeName = s.name.replace(/'/g, "\\'");
+    html += `<div class="search-item" onclick="pickFirebaseStudent('${safeName}')">
+      <b>${s.name}</b><span class="small" style="color:#3b82f6">📚 교재 미배부 있음</span>
+    </div>`;
+  });
+  list.innerHTML = html;
   list.classList.add('show');
+}
+
+// Firebase 학생 선택 — 이름만 채움 (계좌 정보는 사장님이 입력)
+function pickFirebaseStudent(name){
+  if(!modalState) return;
+  modalState.name = name;
+  document.getElementById('fName').value = name;
+  document.getElementById('searchList').classList.remove('show');
+  // 학생 정보 라벨 업데이트
+  updateStudentBadge();
+  // 미완료 환불 자동 감지
+  checkExistingPending();
+  // 다음 칸(예금주)으로 포커스
+  setTimeout(() => {
+    const holderInp = document.getElementById('fHolder');
+    if(holderInp && !modalState.holder) holderInp.focus();
+  }, 100);
 }
 
 function pickStudent(key){
