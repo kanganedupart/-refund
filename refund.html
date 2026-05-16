@@ -7697,18 +7697,23 @@ async function getFirebaseStudents(){
     return null;  // Firebase 미초기화 → null
   }
   try {
-    const snap = await firebase.database().ref('shared/bookUnissued').once('value');
+    // ⭐ 경로: shared/students (학생 명단 전용, 교재 미배부와 분리)
+    // 데이터 구조 예: { "김지유": {...}, "노현지": {...}, ... }
+    // Object.keys()로 이름 추출 — 값 구조 무관하게 동작
+    const snap = await firebase.database().ref('shared/students').once('value');
     const data = snap.val();
     if(!data) return [];
-    // 이름 + 학번 등 추출 (Firebase 데이터 구조에 맞춰)
-    // bookUnissued = { "김지유": {total, books, studentId?}, ... }
-    const list = Object.entries(data).map(([name, info]) => ({
-      name,
-      studentId: info.studentId || '',
-      // 검색용 추가 필드
-      initials: extractInitials(name),
-      lowerName: name.toLowerCase()
-    }));
+    const names = Object.keys(data);
+    const list = names.map(name => {
+      const info = data[name] || {};
+      return {
+        name,
+        studentId: (typeof info === 'object' && info.studentId) ? info.studentId : '',
+        // 검색용 추가 필드
+        initials: extractInitials(name),
+        lowerName: name.toLowerCase()
+      };
+    });
     _firebaseStudentCache = list;
     _firebaseStudentCacheAt = Date.now();
     return list;
@@ -7783,15 +7788,15 @@ function renderSearchList(list, localMatches, fbOnly, rawQ, isInitial){
   });
   // 구분선
   if(localMatches.length > 0 && fbOnly.length > 0){
-    html += `<div style="padding:4px 10px;font-size:10.5px;color:#9ca3af;background:#fafaf8;border-top:1px dashed #e5e5e0">📚 교재 시스템에 있는 학생 (계좌 정보 없음)</div>`;
+    html += `<div style="padding:4px 10px;font-size:10.5px;color:#9ca3af;background:#fafaf8;border-top:1px dashed #e5e5e0">👤 학생 명단 (계좌 정보 없음)</div>`;
   } else if(localMatches.length === 0 && fbOnly.length > 0){
-    html += `<div style="padding:4px 10px;font-size:10.5px;color:#9ca3af;background:#fafaf8">📚 교재 시스템에서 가져옴 (계좌 정보 없음 — 입력 후 저장하면 다음엔 자동으로 떠요)</div>`;
+    html += `<div style="padding:4px 10px;font-size:10.5px;color:#9ca3af;background:#fafaf8">👤 학생 명단 (계좌 정보 없음 — 입력 후 저장하면 다음엔 자동으로 떠요)</div>`;
   }
   // Firebase 학생 (이름만, 계좌 정보 없음)
   fbOnly.slice(0, 6).forEach(s => {
     const safeName = s.name.replace(/'/g, "\\'");
     html += `<div class="search-item" onclick="pickFirebaseStudent('${safeName}')">
-      <b>${s.name}</b><span class="small" style="color:#3b82f6">📚 교재 미배부 있음</span>
+      <b>${s.name}</b><span class="small" style="color:#3b82f6">👤 학생 명단</span>
     </div>`;
   });
   list.innerHTML = html;
