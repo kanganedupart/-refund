@@ -1886,10 +1886,12 @@ function lockAdmin(){
 
 // ⭐ 로그인 시스템 (환불 독자적, localStorage 저장)
 // 직원 비번 저장 위치: localStorage 'refund_v1_staffPw' = { [실명]: 'hash해시값' }
-// 세션 저장 위치: sessionStorage 'refund_v1_session' = 실명
+// 세션 저장 위치: localStorage 'refund_v1_session' = { name: 실명, exp: 만료시각ms }
+// 세션 유지 시간: 24시간 (사장님 룰 2026.05.18)
 // 초기 비번: 0000 (모든 새 직원)
 const LS_STAFF_PW = 'refund_v1_staffPw';
 const SS_SESSION = 'refund_v1_session';
+const SESSION_DURATION_MS = 24 * 60 * 60 * 1000;  // 24시간
 const DEFAULT_PASSWORD = '0000';
 
 // 간단한 해시 (보안 강화는 Firebase Auth 시 처리 — 지금은 평문 노출 방지 수준)
@@ -1923,6 +1925,19 @@ function ensureStaffPassword(staffName){
   }
 }
 
+// ⭐ 세션 저장 (이름 + 만료시각 24시간)
+function _saveSession(staffName){
+  const session = {
+    name: staffName,
+    exp: Date.now() + SESSION_DURATION_MS
+  };
+  try {
+    localStorage.setItem(SS_SESSION, JSON.stringify(session));
+  } catch(e){
+    console.error('[로그인] 세션 저장 실패:', e);
+  }
+}
+
 // 로그인 시도
 function tryLogin(staffName, pw){
   if(!staffName || !pw) return { ok: false, reason: '아이디와 비밀번호를 입력해주세요' };
@@ -1930,7 +1945,7 @@ function tryLogin(staffName, pw){
   if(staffName === 'admin'){
     if(pw === ADMIN_PASSWORD){
       adminUnlocked = true;
-      sessionStorage.setItem(SS_SESSION, 'admin');
+      _saveSession('admin');
       return { ok: true, role: 'admin', name: 'admin' };
     }
     return { ok: false, reason: '어드민 비밀번호가 틀려요' };
@@ -1943,18 +1958,47 @@ function tryLogin(staffName, pw){
   if(map[staffName] !== hashPw(pw)){
     return { ok: false, reason: '비밀번호가 틀려요' };
   }
-  sessionStorage.setItem(SS_SESSION, staffName);
+  _saveSession(staffName);
   return { ok: true, role: getStaffRole(staffName), name: staffName };
 }
 
 function logout(){
   adminUnlocked = false;
-  sessionStorage.removeItem(SS_SESSION);
+  // 두 저장소 모두 정리 (옛 sessionStorage 잔재 있을 수 있음)
+  try { localStorage.removeItem(SS_SESSION); } catch(e){}
+  try { sessionStorage.removeItem(SS_SESSION); } catch(e){}
   location.reload();
 }
 
+// ⭐ 현재 세션 조회 — 만료시각 체크 포함
 function getCurrentSession(){
-  return sessionStorage.getItem(SS_SESSION) || null;
+  try {
+    const raw = localStorage.getItem(SS_SESSION);
+    if(!raw) {
+      // 옛 sessionStorage 방식 호환 (마이그레이션)
+      const old = sessionStorage.getItem(SS_SESSION);
+      if(old){
+        // 옛 세션을 24시간 새 세션으로 마이그레이션
+        _saveSession(old);
+        sessionStorage.removeItem(SS_SESSION);
+        return old;
+      }
+      return null;
+    }
+    const session = JSON.parse(raw);
+    // 옛 데이터 호환 (문자열만 있는 경우)
+    if(typeof session === 'string') return session;
+    // 만료 체크
+    if(!session.exp || Date.now() > session.exp){
+      console.log('[로그인] 세션 만료 — 자동 로그아웃');
+      localStorage.removeItem(SS_SESSION);
+      return null;
+    }
+    return session.name || null;
+  } catch(e){
+    console.error('[로그인] 세션 조회 실패:', e);
+    return null;
+  }
 }
 
 // 비밀번호 변경
