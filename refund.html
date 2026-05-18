@@ -7308,32 +7308,132 @@ function qUpdateTotalBox(){
 }
 
 // ============ 이름 자동완성 ============
-function qOnNameInput(tempId, value){
+async function qOnNameInput(tempId, value){
   qUpdateField(tempId, 'name', value);
   document.querySelectorAll('.q-dropdown').forEach(d => d.remove());
   if(!value || !value.trim()) return;
   const q = value.trim().toLowerCase();
+  // ⭐ 초성 검색 지원 (예: "ㄱㅈㅇ" → "김지유")
+  const isInitial = isInitialQuery(q);
+
+  // ⭐ Firebase에서 학생 목록 실시간 가져오기 (5분 캐시)
+  // - 모든 브라우저(Chrome·Edge)에서 같은 데이터
+  // - shared/students 경로 (교재 프로그램과 공유)
+  let firebaseStudents = await getFirebaseStudents();
+
+  // Firebase 실패 시 localStorage fallback
+  if(!firebaseStudents){
+    console.warn('[학생검색] Firebase 실패 → localStorage 사용');
+    firebaseStudents = Object.values(students || {}).map(st => ({
+      name: st.name,
+      studentId: st.studentId || '',
+      initials: extractInitials(st.name || ''),
+      lowerName: (st.name || '').toLowerCase()
+    }));
+  }
+
+  // 필터링
   const seen = new Set();
   const matches = [];
-  Object.values(students).forEach(st => {
-    if(st && st.name && st.name.toLowerCase().includes(q)){
-      const k = st.name + '|' + (st.account || '');
+  firebaseStudents.forEach(st => {
+    if(!st || !st.name) return;
+    let isMatch = false;
+    if(isInitial){
+      if(st.initials.includes(q)) isMatch = true;
+    } else {
+      if(st.lowerName.includes(q)) isMatch = true;
+    }
+    if(isMatch){
+      const k = st.name + '|' + (st.studentId || '');
       if(!seen.has(k)){ seen.add(k); matches.push(st); }
     }
   });
+
   if(matches.length === 0) return;
+
+  // 드롭다운이 이미 다시 비워졌을 수 있으므로(다음 키 입력) 재확인
   const inp = document.querySelector(`.q-input-name[data-row="${tempId}"]`);
   if(!inp) return;
+  // 입력 값이 그새 바뀌었으면 무시 (race condition 방지)
+  if(inp.value.trim().toLowerCase() !== q) return;
+  // 혹시 그새 다른 드롭다운이 만들어졌으면 제거
+  document.querySelectorAll('.q-dropdown').forEach(d => d.remove());
+
   const dd = document.createElement('div');
   dd.className = 'q-dropdown';
   dd.dataset.row = tempId;
-  dd.innerHTML = matches.slice(0, 8).map((m, i) =>
-    `<div class="q-dropdown-item ${i===0?'active':''}" data-idx="${i}" data-key="${(m.key||m.name).replace(/"/g,'&quot;')}" onmousedown="qPickStudent(${tempId},'${(m.key||m.name).replace(/'/g,"\\'")}')">
-      <span class="q-dd-name">${m.name}</span>
-      <span class="q-dd-info">${m.holder||'-'} / ${m.bank||'-'} / ${m.account||'-'}</span>
-    </div>`
-  ).join('');
+  dd.innerHTML = matches.slice(0, 8).map((m, i) => {
+    // 학번 표시 (있으면)
+    const sidLabel = m.studentId ? `<span style="color:#888;margin-left:4px">${m.studentId}</span>` : '';
+    // ⭐ 과거 환불 이력에서 계좌 정보 가져오기 (드롭다운 미리보기용)
+    const pastAcct = qFindPastAccount(m.name);
+    const acctInfo = pastAcct
+      ? `${pastAcct.holder||'-'} / ${pastAcct.bank||'-'} / ${pastAcct.account||'-'}`
+      : '<span style="color:#aaa">과거 환불 이력 없음 — 계좌 직접 입력</span>';
+    const key = m.name + '|' + (m.studentId || '');
+    return `<div class="q-dropdown-item ${i===0?'active':''}" data-idx="${i}" data-key="${key.replace(/"/g,'&quot;')}" onmousedown="qPickStudentFromFb(${tempId}, '${m.name.replace(/'/g,"\\'")}', '${(m.studentId||'').replace(/'/g,"\\'")}')">
+      <span class="q-dd-name">${m.name}</span>${sidLabel}
+      <span class="q-dd-info">${acctInfo}</span>
+    </div>`;
+  }).join('');
   inp.parentElement.appendChild(dd);
+}
+
+// ⭐ 그 학생의 과거 환불 이력에서 가장 최근 계좌 정보 찾기
+// - 환불 데이터(data.refunds)에서 이름이 일치하는 행 중 가장 최근 것
+// - 학번도 같이 매칭하면 더 정확 (동명이인 대비)
+function qFindPastAccount(name, studentId){
+  if(!name || !data || !data.refunds || data.refunds.length === 0) return null;
+  // 이름 일치하는 환불 행들
+  let candidates = data.refunds.filter(r => r.name === name && (r.holder || r.bank || r.account));
+  // 학번까지 일치하면 더 정확 (있으면 우선)
+  if(studentId){
+    const withSid = candidates.filter(r => r.studentId === studentId);
+    if(withSid.length > 0) candidates = withSid;
+  }
+  if(candidates.length === 0) return null;
+  // 가장 최근(createdAt 기준) 행 선택
+  candidates.sort((a, b) => {
+    const ta = a.createdAt || '';
+    const tb = b.createdAt || '';
+    return tb.localeCompare(ta);  // 내림차순
+  });
+  const recent = candidates[0];
+  return {
+    holder: recent.holder || '',
+    bank: recent.bank || '',
+    account: recent.account || ''
+  };
+}
+
+// Firebase 학생 선택 시 — 이름·학번은 Firebase에서, 계좌는 환불 이력에서
+function qPickStudentFromFb(tempId, name, studentId){
+  // 캐시에서 학생 찾기
+  const cache = _firebaseStudentCache || [];
+  const st = cache.find(s => s.name === name && (s.studentId || '') === (studentId || ''));
+  // 행 객체 업데이트
+  const row = qState.rows.find(r => r.tempId === tempId);
+  if(row){
+    row.name = name;
+    row.studentId = studentId || (st ? st.studentId : '') || '';
+    // ⭐ 계좌는 환불 이력에서 가져옴 (교재엔 계좌 없음)
+    const pastAcct = qFindPastAccount(name, row.studentId);
+    if(pastAcct){
+      row.holder = pastAcct.holder;
+      row.bank = pastAcct.bank;
+      row.account = pastAcct.account;
+    }
+    // 환불 이력 없으면 계좌 칸 빈 채로 둠 (사장님이 직접 입력)
+    row.found = true;
+  }
+  // 드롭다운 닫기 + 표 다시 그리기 (계좌 정보 반영)
+  document.querySelectorAll('.q-dropdown').forEach(d => d.remove());
+  qRenderTable();
+  // 다음 셀로 포커스 (납부일)
+  setTimeout(() => {
+    const next = document.querySelector(`#qTbody tr[data-row="${tempId}"] input[data-field="payDate"]`);
+    if(next) next.focus();
+  }, 50);
 }
 
 // 이름 input의 keydown — ↑↓ 후보 이동, Enter/Tab 선택
@@ -8117,9 +8217,10 @@ async function getFirebaseStudents(){
     console.log('[students] ✓ 학생', names.length, '명 발견:', names.slice(0, 10).join(', '), names.length > 10 ? '...' : '');
     const list = names.map(name => {
       const info = data[name] || {};
+      const isObj = typeof info === 'object' && info !== null;
       return {
         name,
-        studentId: (typeof info === 'object' && info.studentId) ? info.studentId : '',
+        studentId: isObj && info.studentId ? info.studentId : '',
         initials: extractInitials(name),
         lowerName: name.toLowerCase()
       };
