@@ -7353,17 +7353,24 @@ function qUpdateTotalBox(){
 
 // ============ 이름 자동완성 ============
 async function qOnNameInput(tempId, value){
+  console.log('[학생검색] === 호출 ===', { tempId, value });
   qUpdateField(tempId, 'name', value);
   document.querySelectorAll('.q-dropdown').forEach(d => d.remove());
-  if(!value || !value.trim()) return;
+  if(!value || !value.trim()) {
+    console.log('[학생검색] 빈 값 → 종료');
+    return;
+  }
   const q = value.trim().toLowerCase();
   // ⭐ 초성 검색 지원 (예: "ㄱㅈㅇ" → "김지유")
   const isInitial = isInitialQuery(q);
+  console.log('[학생검색] 검색어:', q, '/ 초성검색?', isInitial);
 
   // ⭐ Firebase에서 학생 목록 실시간 가져오기 (5분 캐시)
-  // - 모든 브라우저(Chrome·Edge)에서 같은 데이터
-  // - shared/students 경로 (교재 프로그램과 공유)
   let firebaseStudents = await getFirebaseStudents();
+  console.log('[학생검색] Firebase 학생 목록 받음. 개수:', firebaseStudents ? firebaseStudents.length : 'null');
+  if(firebaseStudents && firebaseStudents.length > 0){
+    console.log('[학생검색] 첫 3명 샘플:', firebaseStudents.slice(0, 3));
+  }
 
   // Firebase 실패 시 localStorage fallback
   if(!firebaseStudents){
@@ -7403,13 +7410,24 @@ async function qOnNameInput(tempId, value){
     }
   });
 
-  if(matches.length === 0) return;
+  console.log('[학생검색] 매칭 결과:', matches.length, '명', matches.slice(0, 5).map(m => m.name));
+
+  if(matches.length === 0) {
+    console.log('[학생검색] 매칭 없음 → 드롭다운 안 띄움');
+    return;
+  }
 
   // 드롭다운이 이미 다시 비워졌을 수 있으므로(다음 키 입력) 재확인
   const inp = document.querySelector(`.q-input-name[data-row="${tempId}"]`);
-  if(!inp) return;
+  if(!inp) {
+    console.warn('[학생검색] ❌ input 못 찾음! tempId=', tempId);
+    return;
+  }
   // 입력 값이 그새 바뀌었으면 무시 (race condition 방지)
-  if(inp.value.trim().toLowerCase() !== q) return;
+  if(inp.value.trim().toLowerCase() !== q) {
+    console.log('[학생검색] 입력값 바뀜 → 종료. 현재값:', inp.value, '/ 검색했던값:', q);
+    return;
+  }
   // 혹시 그새 다른 드롭다운이 만들어졌으면 제거
   document.querySelectorAll('.q-dropdown').forEach(d => d.remove());
 
@@ -7435,7 +7453,22 @@ async function qOnNameInput(tempId, value){
       <span class="q-dd-info">${acctInfo}</span>
     </div>`;
   }).join('');
-  inp.parentElement.appendChild(dd);
+  // ⭐ 부모 td 안에 가두지 않고 body에 직접 붙여서 fixed로 띄움
+  // (td 안에 두면 overflow나 다른 element에 가려질 수 있음)
+  const inpRect = inp.getBoundingClientRect();
+  dd.style.position = 'fixed';
+  dd.style.top = (inpRect.bottom + 2) + 'px';
+  dd.style.left = inpRect.left + 'px';
+  dd.style.width = Math.max(inpRect.width, 280) + 'px';
+  dd.style.zIndex = '99999';
+  dd.style.background = 'white';
+  dd.style.border = '1px solid #ccc';
+  dd.style.borderRadius = '6px';
+  dd.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+  dd.style.maxHeight = '300px';
+  dd.style.overflowY = 'auto';
+  document.body.appendChild(dd);
+  console.log('[학생검색] ✓ 드롭다운 body에 추가됨. position=fixed, top=' + dd.style.top + ', left=' + dd.style.left);
 }
 
 // ⭐ 그 학생의 과거 환불 이력에서 가장 최근 계좌 정보 찾기
