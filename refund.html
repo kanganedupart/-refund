@@ -364,6 +364,37 @@ body.role-starter [data-need-role="chief"].is-on{cursor:default;pointer-events:n
 .modal-narrow{max-width:480px;width:100%}
 .modal{background:white;border-radius:14px;max-width:600px;width:100%;max-height:92vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.25);position:relative}
 .modal-wide{max-width:960px}
+.modal-wide-xl{max-width:1500px;width:98vw}
+@media (max-width:1550px){
+  .modal-wide-xl{max-width:98vw}
+}
+/* ⭐ 환불추가 모달 - 학생 정보 1줄 그리드 (사장님 룰 2026.05.18) */
+/* 비율: 학생명 1.4 / 사유 1.0 / 예금주 1.0 / 은행 1.0 / 계좌 2.6 / 신규 auto */
+.student-info-row{
+  display:grid;
+  grid-template-columns:1.4fr 1fr 1fr 1fr 2.6fr auto;
+  gap:8px;
+  align-items:end;
+}
+.student-info-row .field{margin:0}
+.student-info-row .field label{display:block;font-size:11px;color:var(--text-muted);margin-bottom:2px;padding:0}
+.student-info-row .field input{height:32px;padding:4px 8px;font-size:13px;width:100%;box-sizing:border-box}
+.student-info-row .field-newbie{display:flex;align-items:flex-end;padding-bottom:4px;min-width:38px}
+/* 사유 버튼 컴팩트 */
+.reason-btn-compact{
+  flex:1;height:32px;font-size:11.5px;padding:0 6px;
+  border-radius:5px;border:1px solid var(--border);background:white;
+  font-family:inherit;cursor:pointer;color:var(--text-muted);font-weight:400 !important;
+}
+.reason-btn-compact:hover{border-color:var(--border-strong)}
+.reason-btn-compact.active{border-color:var(--primary);background:var(--primary-light);color:var(--primary-dark);font-weight:400 !important}
+/* 좁은 화면에서는 2줄로 분리 */
+@media (max-width:1000px){
+  .student-info-row{grid-template-columns:1.5fr 1fr 1fr;}
+  .student-info-row > div:nth-child(4),
+  .student-info-row > div:nth-child(5){grid-column:auto}
+  .student-info-row > div:nth-child(5){grid-column:span 2}
+}
 .modal-header{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;cursor:move;user-select:none;background:#fafaf8;border-radius:14px 14px 0 0}
 .modal-title{font-size:16px;font-weight:800}
 .modal-close{background:none;border:none;font-size:22px;cursor:pointer;color:var(--text-muted);padding:0;width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:6px}
@@ -396,6 +427,115 @@ body.role-starter [data-need-role="chief"].is-on{cursor:default;pointer-events:n
 
 /* 환불 줄 카드 */
 .refund-line{background:white;border:1.5px solid var(--border);border-radius:9px;padding:11px 13px;margin-bottom:8px;position:relative}
+
+/* ⭐ 환불추가 모달 - 컴팩트 한 줄 레이아웃 (사장님 룰 2026.05.18) */
+.refund-line-compact{background:white;border:1px solid var(--border);border-radius:7px;padding:6px 8px;margin-bottom:5px;position:relative;transition:border-color 0.15s}
+.refund-line-compact:hover{border-color:var(--border-strong)}
+.refund-line-compact.line-manual{background:#fff7ed;border-color:#fdba74}
+.refund-line-compact.expanded{border-color:#fbbf24;background:#fffbeb;padding-bottom:8px}
+.refund-line-compact.line-bounced{border-color:#dc2626;background:#fef2f2}
+.refund-line-compact.line-fixed{border-color:#0F6E56;background:#ecfdf5}
+
+/* 메인 줄 - flex로 동적 칸 처리 (특강 방식, 학사 방 셀렉트 추가 가능) */
+.line-main-row{
+  display:flex;align-items:center;gap:5px;font-size:11.5px;flex-wrap:nowrap;
+}
+.line-main-row .line-num{font-size:10px;color:#888780;font-weight:500;text-align:center;width:22px;flex-shrink:0}
+.line-main-row select, .line-main-row input{height:26px;font-size:11.5px;padding:0 6px;border:1px solid var(--border);border-radius:4px;font-family:inherit;background:white;box-sizing:border-box}
+.line-main-row select:focus, .line-main-row input:focus{outline:1.5px solid var(--primary);border-color:var(--primary)}
+.line-main-row select:disabled{background:#f3f4f6;color:#888780;cursor:not-allowed}
+.line-sel-type{font-weight:500;width:75px;flex-shrink:0}
+.line-sel-sub{width:85px;flex-shrink:0}
+.line-sel-mode{width:65px;flex-shrink:0;background:#fef3c7;border-color:#fbbf24}
+.line-sel-room{width:100px;flex-shrink:0}
+.line-sub-empty{font-size:10px;color:#B4B2A9;text-align:center;width:85px;flex-shrink:0}
+.line-input-date{font-variant-numeric:tabular-nums;text-align:center;width:65px;flex-shrink:0}
+.line-input-fee{font-variant-numeric:tabular-nums;text-align:right;width:100px;flex-shrink:0}
+.line-sel-method{width:70px;flex-shrink:0}
+/* ⭐ 환불액 input — 자동 모드 = 연노랑, 수동 모드 = 짙은 베이지 (사장님 룰 2026.05.18) */
+.line-refund-cell-wrap{position:relative;height:28px;width:130px;flex-shrink:0;display:flex;align-items:center}
+/* 자동 계산 결과: 연한 노란색 배경 + 진한 글씨 */
+.line-refund-input{height:28px;padding:0 10px;font-size:13.5px;border:1px solid #fcd34d;border-radius:4px;background:#fef3c7;font-variant-numeric:tabular-nums;text-align:right;color:#713f12;font-weight:700;width:100%;box-sizing:border-box;font-family:inherit}
+.line-refund-input::placeholder{color:#a18256;font-weight:400;font-variant-numeric:initial;text-align:left;font-size:11px}
+.line-refund-input:focus{outline:2px solid #f59e0b;background:white !important;border-color:#d97706}
+.line-refund-input:hover{background:#fde68a}
+/* 수동 입력 모드: 짙은 베이지 (구분) */
+.line-refund-cell-wrap.manual .line-refund-input{background:#ede5cf;border-color:#d4a574;color:#2C2C2A}
+.line-refund-cell-wrap.manual .line-refund-input:hover{background:#dfd5b8}
+/* 익월 모드: 연한 초록 */
+.line-refund-cell-wrap.next-month .line-refund-input{background:#dcfce7;border-color:#86efac;color:#14532d;font-weight:700}
+/* 수동 입력 ⚠️ 배지 */
+.line-manual-badge{position:absolute;top:1px;right:3px;font-size:11px;pointer-events:none}
+
+/* ⭐ 메모 input (한 줄에 바로) */
+.line-memo-inline{height:26px;padding:0 6px;font-size:11.5px;border:1px solid var(--border);border-radius:4px;background:white;box-sizing:border-box;flex:1;min-width:120px;max-width:280px}
+.line-memo-inline::placeholder{color:#B4B2A9}
+.line-memo-inline:focus{outline:1.5px solid var(--primary);border-color:var(--primary)}
+.line-remove-btn-wrap{flex-shrink:0}
+
+/* 환불액 셀 (자동 계산 결과) — 노란색 강조, 글씨는 작고 얇게 (사장님 룰) */
+.line-refund-cell{height:26px;padding:0 8px;border:1px solid #FAC775;border-radius:4px;background:#FAEEDA;display:flex;align-items:center;justify-content:flex-end;color:#633806;font-weight:400;font-size:11px;font-variant-numeric:tabular-nums;gap:6px;overflow:hidden;white-space:nowrap;width:110px;flex-shrink:0;box-sizing:border-box}
+.line-refund-cell.manual{background:#fed7aa;border-color:#fb923c;color:#9a3412}
+.line-refund-cell .line-result-rule{display:none}
+.line-refund-cell .line-result-amount{flex-shrink:0}
+
+/* 익월 전액 체크박스 (작은 라벨 포함) */
+.line-next-chk{display:inline-flex;align-items:center;justify-content:center;cursor:pointer;height:26px;padding:0 6px;background:white;border:1px solid var(--border);border-radius:4px;gap:3px;flex-shrink:0;box-sizing:border-box}
+.line-next-chk input{width:14px;height:14px;margin:0;cursor:pointer}
+.line-next-chk .line-next-label{display:inline;font-size:9.5px;color:#888780;font-weight:400}
+.line-next-chk:hover{background:#fef3c7;border-color:#fde68a}
+.line-next-chk:has(input:checked){background:#fef3c7;border-color:#f59e0b}
+.line-next-chk:has(input:checked) .line-next-label{color:#92400e;font-weight:500}
+.line-next-placeholder{height:26px;width:50px;flex-shrink:0}
+
+/* ⭐ 메모 input (한 줄에 바로) */
+.line-memo-inline{height:26px;padding:0 6px;font-size:11.5px;border:1px solid var(--border);border-radius:4px;background:white;box-sizing:border-box}
+.line-memo-inline::placeholder{color:#B4B2A9}
+.line-memo-inline:focus{outline:1.5px solid var(--primary);border-color:var(--primary)}
+
+/* 삭제 버튼 */
+.line-remove-btn{height:26px;width:26px;border:1px solid var(--border);border-radius:4px;background:white;font-size:12px;color:#5F5E5A;cursor:pointer;padding:0;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.line-remove-btn:hover{background:#fef2f2;border-color:#fca5a5;color:#dc2626}
+.line-remove-btn:disabled{opacity:0.3;cursor:not-allowed}
+
+/* 부가 행 (학사비 방·특강 방식·교재 미배부) */
+.line-sub-row{margin-top:4px;padding:4px 6px 4px 28px;display:flex;align-items:center;gap:6px;font-size:11px;color:#5F5E5A;background:#fafafa;border-radius:4px;flex-wrap:wrap}
+.line-sub-row .line-sub-label{color:#888780;font-size:10.5px}
+.line-sub-row.special-mode{background:#fef3c7}
+.line-sub-row.line-book-sub{background:#fffbeb}
+
+/* 수동 사유 칩 (수동값에 값이 있을 때 자동 표시) */
+.line-manual-chips{margin-top:4px;padding:0 0 0 28px;display:flex;flex-wrap:wrap;gap:3px}
+.line-manual-chips .reason-chip{font-size:10px;padding:2px 6px;border:1px solid #fbbf24;border-radius:3px;background:white;cursor:pointer;color:#92400e}
+.line-manual-chips .reason-chip:hover{background:#fef3c7}
+
+/* 카드 재결제 (카드 결제 시만) */
+.line-recharge-row{margin-top:4px;padding:4px 6px 4px 28px;display:flex;align-items:center;gap:8px;font-size:11px;color:#5F5E5A;background:#eff6ff;border-radius:4px}
+.line-recharge-chk{display:flex;align-items:center;gap:4px;cursor:pointer}
+.line-recharge-chk input{width:14px;height:14px;margin:0;cursor:pointer}
+.line-recharge-input{height:24px;padding:0 6px;font-size:11.5px;border:1px solid var(--border);border-radius:4px;font-variant-numeric:tabular-nums;text-align:right;width:160px;background:white}
+
+/* 교재비 책 목록 */
+.line-book-btn{font-size:11px;padding:3px 8px;border:1px solid #d4a574;background:#fff7ed;color:#92400e;border-radius:4px;cursor:pointer;font-weight:500}
+.line-book-btn:hover{background:#fed7aa}
+.line-book-toggle{font-size:10.5px;padding:2px 6px;border:1px solid #fbbf24;background:white;color:#92400e;border-radius:3px;cursor:pointer}
+.line-book-total{font-size:11px;color:#633806;font-weight:600;font-variant-numeric:tabular-nums}
+.line-book-items{margin-top:4px;padding:6px 10px;background:white;border:1px solid #fbbf24;border-radius:4px;display:flex;flex-direction:column;gap:3px;max-height:160px;overflow-y:auto;margin-left:28px}
+.line-book-item{display:flex;align-items:center;gap:6px;font-size:11px;color:#444441;padding:1px 0}
+.line-book-item input{width:13px;height:13px;margin:0;cursor:pointer}
+.line-book-item .line-book-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.line-book-item .line-book-price{color:#5F5E5A;font-variant-numeric:tabular-nums}
+
+/* 반송/수정 라벨 */
+.line-bounce-row{padding:4px 0 0 28px;font-size:11px}
+.line-bounce-label{color:#dc2626;font-weight:500;font-size:11px}
+.line-fix-label{color:#0F6E56;font-weight:500;font-size:11px}
+
+/* 좁은 화면에서는 자동 줄바꿈 */
+@media (max-width:1200px){
+  .line-main-row{flex-wrap:wrap}
+  .line-memo-inline{min-width:200px;flex-basis:100%}
+}
 /* 일괄 추가 모달 - 학생 카드 */
 .bulk-stu-card{background:white;border:1px solid var(--border);border-radius:8px;padding:10px 12px}
 .bulk-stu-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
@@ -1621,7 +1761,7 @@ console.log('[Firebase] 초기화 완료 — Realtime DB URL:', firebase.databas
 <!-- ───── 환불 추가/수정 모달 ───── -->
 <!-- ───── 환불 추가/수정 모달 (학생 1명 + 환불 줄 여러 개) ───── -->
 <div class="modal-overlay" id="addModal">
-  <div class="modal modal-wide">
+  <div class="modal modal-wide modal-wide-xl">
     <div class="modal-header" id="modalHeader">
       <span class="modal-title" id="addModalTitle">＋ 환불 추가</span>
       <div style="display:flex;align-items:center;gap:6px">
@@ -1637,61 +1777,52 @@ console.log('[Firebase] 초기화 완료 — Realtime DB URL:', firebase.databas
       </div>
       <!-- 학생 정보 (공통) -->
       <div class="ms-section">
-        <div class="ms-section-title">👤 학생 정보</div>
-        <div class="form-row">
+        <div class="ms-section-title" style="margin-bottom:6px">👤 학생 정보</div>
+        <!-- ⭐ 1줄 그리드: 학생명 / 사유 / 예금주 / 은행 / 계좌 / 신규 (사장님 룰 2026.05.18) -->
+        <div class="student-info-row">
           <div class="field field-search">
             <label>학생 이름 <span style="color:var(--danger);font-weight:700">*</span></label>
-            <input type="text" id="fName" oninput="searchStudent();updateStudentBadge()" onfocus="searchStudent()" onblur="setTimeout(checkExistingPending, 200)" autocomplete="off" placeholder="예: 김지유" />
+            <input type="text" id="fName" class="modal-line-input" data-field="fName" oninput="searchStudent();updateStudentBadge()" onfocus="searchStudent()" onblur="setTimeout(checkExistingPending, 200)" onkeydown="handleStudentInfoKey(event)" autocomplete="off" placeholder="예: 김지유" />
             <div class="search-list" id="searchList"></div>
           </div>
-        </div>
-        <div id="studentInfoLabel" style="font-size:11px;color:var(--text-muted);margin:-4px 0 6px;padding:0 2px;display:none">
-          <span id="studentInfoText"></span>
-        </div>
-        <div id="bankInfoSection">
-          <div id="bankInfoLabel" style="font-size:11px;color:var(--text-muted);margin:6px 0 4px;padding:0 2px">
-            💳 카드만 환불할 땐 계좌 정보 비워둬도 돼요
-          </div>
-          <div class="form-row form-row-2">
-            <div class="field">
-              <label id="lblHolder">예금주</label>
-              <input type="text" id="fHolder" />
-            </div>
-            <div class="field" style="position:relative">
-              <label id="lblBank">은행</label>
-              <input type="text" id="fBank" placeholder="국민, 신한, 기업..." 
-                     oninput="searchBank()" 
-                     onfocus="searchBank()" 
-                     onblur="setTimeout(()=>document.getElementById('bankList').classList.remove('show'),200)" 
-                     autocomplete="off" />
-              <div class="search-list" id="bankList"></div>
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="field">
-              <label id="lblAccount">계좌번호</label>
-              <input type="text" id="fAccount" />
-            </div>
-          </div>
-        </div>
-        <input type="hidden" id="fStudentId" />
-        <input type="hidden" id="fStaff" />
-        <div class="form-row form-row-2" style="margin-top:8px">
           <div class="field">
-            <label>환불 사유 <span style="color:var(--danger);font-weight:700">*</span></label>
-            <div style="display:flex;gap:6px">
-              <button type="button" class="reason-btn" id="reasonRetire" onclick="setReason('퇴반')">퇴반</button>
-              <button type="button" class="reason-btn" id="reasonCancel" onclick="setReason('취소')">취소</button>
+            <label>사유 <span style="color:var(--danger);font-weight:700">*</span></label>
+            <div style="display:flex;gap:3px">
+              <button type="button" class="reason-btn modal-line-input reason-btn-compact" data-field="reason-퇴반" id="reasonRetire" onclick="setReason('퇴반')" onkeydown="handleReasonBtnKey(event,'퇴반')" title="단축키: Alt+R">퇴반</button>
+              <button type="button" class="reason-btn modal-line-input reason-btn-compact" data-field="reason-취소" id="reasonCancel" onclick="setReason('취소')" onkeydown="handleReasonBtnKey(event,'취소')" title="단축키: Alt+C">취소</button>
             </div>
           </div>
           <div class="field">
-            <label style="visibility:hidden">_</label>
-            <label style="display:flex;align-items:center;gap:6px;padding:9px 0;cursor:pointer">
-              <input type="checkbox" id="fNewbie" onchange="recalcAllLines()" style="width:18px;height:18px;cursor:pointer" />
-              <span style="font-size:14px">신규생 (3일 이하 일수환불)</span>
+            <label id="lblHolder">예금주</label>
+            <input type="text" id="fHolder" class="modal-line-input" data-field="fHolder" onkeydown="handleStudentInfoKey(event)" />
+          </div>
+          <div class="field" style="position:relative">
+            <label id="lblBank">은행</label>
+            <input type="text" id="fBank" class="modal-line-input" data-field="fBank" placeholder="국민..." 
+                   oninput="searchBank()" 
+                   onfocus="searchBank()" 
+                   onblur="setTimeout(()=>document.getElementById('bankList').classList.remove('show'),200)" 
+                   onkeydown="handleStudentInfoKey(event)"
+                   autocomplete="off" />
+            <div class="search-list" id="bankList"></div>
+          </div>
+          <div class="field">
+            <label id="lblAccount">계좌번호</label>
+            <input type="text" id="fAccount" class="modal-line-input" data-field="fAccount" onkeydown="handleStudentInfoKey(event)" />
+          </div>
+          <div class="field-newbie">
+            <label style="display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;padding-top:3px">
+              <span class="muted tiny" style="font-size:10px">신규</span>
+              <input type="checkbox" id="fNewbie" onchange="recalcAllLines()" style="width:18px;height:18px;cursor:pointer;margin:0" title="3일 이하 일수환불" />
             </label>
           </div>
         </div>
+        <div id="studentInfoLabel" style="display:none">
+          <span id="studentInfoText"></span>
+        </div>
+        <div id="bankInfoLabel" style="display:none"></div>
+        <input type="hidden" id="fStudentId" />
+        <input type="hidden" id="fStaff" />
       </div>
 
       <!-- 환불 항목 줄들 -->
@@ -1727,6 +1858,10 @@ console.log('[Firebase] 초기화 완료 — Realtime DB URL:', firebase.databas
       </div>
     </div>
     <div class="modal-footer">
+      <label style="display:inline-flex;align-items:center;gap:6px;margin-right:auto;font-size:12px;color:#5F5E5A;cursor:pointer;user-select:none" title="체크하면 저장 후 모달이 닫히지 않고 다음 학생을 바로 입력할 수 있어요">
+        <input type="checkbox" id="modalKeepOpenChk" />
+        <span>저장 후 계속 입력</span>
+      </label>
       <button class="btn" onclick="tryCloseModal()">취소</button>
       <button class="btn btn-primary" onclick="saveModalAll()">저장</button>
       <button class="btn btn-approve-modal" id="btnSaveAndApprove" onclick="saveAndApprove()" style="display:none" title="저장 + 승인">저장 & 승인</button>
@@ -4775,7 +4910,9 @@ function renderAddLineButtons(){
   // ※ 익월 전액은 버튼 X — 항목 추가 후 줄 안의 ☐ 익월 전액 체크박스로 토글
   //   (수강료/학사비/급식비 줄에서만 보임)
   const presets = [
-    {label:'수강료', type:'수강료', subType:'정규'},
+    {label:'수강료·정규', type:'수강료', subType:'정규'},
+    {label:'수강료·논술', type:'수강료', subType:'논술'},
+    {label:'수강료·특강', type:'수강료', subType:'특강'},
     {label:'급식비', type:'급식비', subType:'중식+석식'},
     {label:'학사비', type:'학사비', subType:'정규학사'},
     {label:'학사보증금', type:'학사비', subType:'학사보증금'},
@@ -4783,9 +4920,272 @@ function renderAddLineButtons(){
     {label:'패드보증금', type:'패드비', subType:'보증금'},
     {label:'패드대여료', type:'패드비', subType:'대여료'}
   ];
-  wrap.innerHTML = presets.map(p => 
-    `<button class="add-line-btn" onclick="addLine('${p.type}','${p.subType||''}')">+ ${p.label}</button>`
+  wrap.innerHTML = presets.map((p, i) => 
+    `<button class="add-line-btn" onclick="addLine('${p.type}','${p.subType||''}')" title="단축키: Alt+${i+1}">+ ${p.label} <span style="font-size:9px;color:#9ca3af;margin-left:3px">Alt+${i+1}</span></button>`
   ).join('');
+}
+
+// ⭐ 환불추가 모달 — 날짜 키보드 입력 유틸 (사장님 룰 2026.05.18)
+// "5/1" → "2026-05-01", "0518" → "2026-05-18", "5-18" → "2026-05-18"
+function fmtDateShort(isoDate){
+  // "2026-05-18" → "5/18" (현재 연도면 짧게)
+  if(!isoDate) return '';
+  const m = String(isoDate).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(!m) return isoDate;
+  const curYear = new Date().getFullYear();
+  if(parseInt(m[1]) === curYear){
+    return parseInt(m[2]) + '/' + parseInt(m[3]);
+  }
+  return m[1].slice(2) + '/' + parseInt(m[2]) + '/' + parseInt(m[3]);
+}
+
+function parseDateLoose(s){
+  if(!s || !s.trim()) return '';
+  s = s.trim();
+  // 이미 ISO 형식이면 그대로
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const curYear = new Date().getFullYear();
+  // "0518" 또는 "05-18" 또는 "5/18" 또는 "5-18"
+  let m, year = curYear, month, day;
+  // "0518" (4자리)
+  m = s.match(/^(\d{2})(\d{2})$/);
+  if(m){ month = parseInt(m[1]); day = parseInt(m[2]); }
+  // "5/18" 또는 "5-18" 또는 "05.18"
+  if(!month){
+    m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})$/);
+    if(m){ month = parseInt(m[1]); day = parseInt(m[2]); }
+  }
+  // "26/5/18" 또는 "2026/5/18" 등 (연도 포함)
+  if(!month){
+    m = s.match(/^(\d{2,4})[\/.\-](\d{1,2})[\/.\-](\d{1,2})$/);
+    if(m){
+      let y = parseInt(m[1]);
+      if(y < 100) y = 2000 + y;
+      year = y; month = parseInt(m[2]); day = parseInt(m[3]);
+    }
+  }
+  if(!month || !day) return null;  // 파싱 실패
+  if(month < 1 || month > 12) return null;
+  if(day < 1 || day > 31) return null;
+  return year + '-' + String(month).padStart(2,'0') + '-' + String(day).padStart(2,'0');
+}
+
+function onLineDateInput(tempId, field, value){
+  // 입력 중에는 그대로 두고, blur 시점에 파싱
+  if(!modalState) return;
+  const line = modalState.lines.find(l => l.tempId === tempId);
+  if(!line) return;
+  // 임시 저장 (input 값 그대로, 파싱 안 함)
+  line['_temp_' + field] = value;
+}
+
+function onLineDateBlur(tempId, field, inputEl){
+  if(!modalState) return;
+  const line = modalState.lines.find(l => l.tempId === tempId);
+  if(!line) return;
+  const raw = inputEl.value;
+  if(!raw || !raw.trim()){
+    line[field] = '';
+    updateLineField(tempId, field, '');
+    return;
+  }
+  const iso = parseDateLoose(raw);
+  if(iso){
+    line[field] = iso;
+    inputEl.value = fmtDateShort(iso);  // 정규화된 표시
+    updateLineField(tempId, field, iso);
+  } else {
+    // 파싱 실패 → 빨간색으로 표시 (사용자에게 알림)
+    inputEl.style.borderColor = '#dc2626';
+    inputEl.style.background = '#fef2f2';
+    setTimeout(() => {
+      inputEl.style.borderColor = '';
+      inputEl.style.background = '';
+    }, 2000);
+    toast('날짜 형식 오류: "' + raw + '" — 예: 5/18 또는 0518');
+  }
+}
+
+// ⭐ 환불추가 모달 — Alt+1~7 단축키로 항목 추가 + Alt+R/C 사유 + 자동 포커스 (사장님 룰 2026.05.18)
+// 모달이 열려있을 때만 동작
+function handleAddModalShortcut(e){
+  const modal = document.getElementById('addModal');
+  if(!modal || !modal.classList.contains('active')) return;
+  // ⭐ Ctrl+Enter = 저장
+  if(e.ctrlKey && e.key === 'Enter'){
+    e.preventDefault();
+    saveModalAll();
+    return;
+  }
+  // Alt+R = 퇴반, Alt+C = 취소
+  if(e.altKey && !e.ctrlKey && !e.metaKey){
+    if(e.key === 'r' || e.key === 'R' || e.code === 'KeyR'){
+      e.preventDefault();
+      setReason('퇴반');
+      // 사유 선택 후 자동으로 첫 항목 추가 (없으면)
+      if(!modalState || modalState.lines.length === 0){
+        // 아직 항목 없으면 — 첫 항목 추가 도움
+        // 자동 추가는 안 함 (사용자 의도 존중), 사용자가 Alt+1~7 누르도록 안내
+      }
+      return;
+    }
+    if(e.key === 'c' || e.key === 'C' || e.code === 'KeyC'){
+      e.preventDefault();
+      setReason('취소');
+      return;
+    }
+    // Alt+숫자 = 항목 추가 (빠른모달과 동일한 순서)
+    if(/^[1-9]$/.test(e.key)){
+      e.preventDefault();
+      const idx = parseInt(e.key) - 1;
+      const presets = [
+        {type:'수강료', subType:'정규'},      // Alt+1
+        {type:'수강료', subType:'논술'},      // Alt+2
+        {type:'수강료', subType:'특강'},      // Alt+3
+        {type:'급식비', subType:'중식+석식'},  // Alt+4
+        {type:'학사비', subType:'정규학사'},   // Alt+5
+        {type:'학사비', subType:'학사보증금'}, // Alt+6
+        {type:'교재비', subType:null},        // Alt+7
+        {type:'패드비', subType:'보증금'},    // Alt+8
+        {type:'패드비', subType:'대여료'}     // Alt+9
+      ];
+      if(presets[idx]){
+        addLine(presets[idx].type, presets[idx].subType);
+        // ⭐ 항목 추가 후 새 줄의 납부일 칸으로 자동 포커스
+        setTimeout(() => {
+          const inputs = document.querySelectorAll('.modal-date-input[data-field="payDate"]');
+          if(inputs.length > 0){
+            const lastInput = inputs[inputs.length - 1];  // 방금 추가된 줄
+            lastInput.focus();
+            try { lastInput.select(); } catch(e){}
+          }
+        }, 50);
+      }
+    }
+  }
+}
+// 전역 키 리스너 등록 (한 번만)
+if(!window._addModalShortcutBound){
+  window._addModalShortcutBound = true;
+  document.addEventListener('keydown', handleAddModalShortcut, true);
+}
+
+// ⭐ 환불추가 모달 — Tab/Enter로 다음 input 이동 (사장님 룰 2026.05.18)
+// ⭐ 학생 정보 input (이름·예금주·은행·계좌) 키보드 이동 (사장님 룰 2026.05.18)
+// 좌우 화살표·Tab·Enter로 다음/이전 칸 이동, 은행/학생 검색 드롭다운 우선
+function handleStudentInfoKey(e){
+  const cur = e.target;
+  // ⭐ 은행 input일 때: 드롭다운 키보드 처리 우선
+  if(cur && cur.id === 'fBank'){
+    if(handleBankKeydown(e)) return;  // 드롭다운이 처리하면 끝
+  }
+  // ⭐ 학생 이름 input일 때: 학생 검색 드롭다운이 화살표·Enter 처리 (기존 로직)
+  const searchList = document.getElementById('searchList');
+  const bankList = document.getElementById('bankList');
+  const searchOpen = searchList && searchList.classList.contains('show');
+  const bankOpen = bankList && bankList.classList.contains('show');
+  if(searchOpen && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter')) return;
+  if(bankOpen && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter')) return;
+
+  const isNext = (e.key === 'Tab' && !e.shiftKey) || e.key === 'Enter' || e.key === 'ArrowRight';
+  const isPrev = (e.key === 'Tab' && e.shiftKey) || e.key === 'ArrowLeft';
+  if(!isNext && !isPrev) return;
+
+  // 화살표 좌우: text input 내 글자 이동 보호
+  if((e.key === 'ArrowRight' || e.key === 'ArrowLeft') && cur.type !== 'select-one'){
+    const len = (cur.value || '').length;
+    const pos = cur.selectionStart;
+    if(e.key === 'ArrowRight'){
+      if(pos != null && pos < len) return;
+    } else {
+      if(pos != null && pos > 0) return;
+    }
+  }
+  e.preventDefault();
+
+  // 학생 정보 + 사유 + 줄 input들 통합 흐름
+  const all = Array.from(document.querySelectorAll('.modal-line-input'));
+  const visible = all.filter(el => !el.disabled && el.offsetParent !== null);
+  const idx = visible.indexOf(cur);
+  if(idx < 0) return;
+  let nextEl = null;
+  if(isNext){
+    nextEl = visible[idx + 1] || null;
+  } else {
+    nextEl = visible[idx - 1] || null;
+  }
+  if(nextEl){
+    nextEl.focus();
+    if(nextEl.select && nextEl.tagName !== 'BUTTON' && nextEl.type !== 'select-one' && nextEl.type !== 'date'){
+      try { nextEl.select(); } catch(e){}
+    }
+  }
+}
+
+function handleReasonBtnKey(e, reason){
+  // Enter/Space로 사유 선택
+  if(e.key === 'Enter' || e.key === ' '){
+    e.preventDefault();
+    setReason(reason);
+    // 선택 후 Alt+1 안내하거나 자동으로 첫 항목 추가하기보다 — 다음 영역으로 포커스
+    // 사용자가 Alt+1~7로 항목 추가하도록 유도
+    return;
+  }
+  // Tab/Shift+Tab은 브라우저 기본 동작 그대로 (다음/이전 input으로)
+  // 단 화살표 좌우는 사유 버튼끼리 이동
+  if(e.key === 'ArrowRight' || e.key === 'ArrowLeft'){
+    e.preventDefault();
+    const other = reason === '퇴반' ? document.getElementById('reasonCancel') : document.getElementById('reasonRetire');
+    if(other) other.focus();
+  }
+}
+
+function handleLineInputKey(e, tempId){
+  // Tab/Enter/화살표만 처리. 나머지는 기본 동작
+  const isNext = (e.key === 'Tab' && !e.shiftKey) || e.key === 'Enter' || e.key === 'ArrowRight';
+  const isPrev = (e.key === 'Tab' && e.shiftKey) || e.key === 'ArrowLeft';
+  if(!isNext && !isPrev) return;
+  // input/select가 아니면 무시
+  const cur = e.target;
+  if(!cur.classList || !cur.classList.contains('modal-line-input')) return;
+  // ⭐ 화살표는 input 입력 중일 때만 작동 (text input에서 글자 사이 이동 보호)
+  // select는 ← → 누르면 항상 칸 이동 (option 변경은 ↑↓로)
+  if((e.key === 'ArrowRight' || e.key === 'ArrowLeft') && cur.tagName !== 'SELECT'){
+    const len = (cur.value || '').length;
+    const pos = cur.selectionStart;
+    if(e.key === 'ArrowRight'){
+      // 커서가 맨 끝이 아니면 글자 이동 (기본 동작) 허용
+      if(pos != null && pos < len) return;
+    } else {
+      // ArrowLeft: 커서가 맨 처음이 아니면 글자 이동 허용
+      if(pos != null && pos > 0) return;
+    }
+  }
+  e.preventDefault();
+  // 모달 내 모든 input 순서대로 모음 (DOM 순서)
+  const inputs = Array.from(document.querySelectorAll('.modal-line-input'));
+  // disabled, type=hidden 제외
+  const visible = inputs.filter(el => !el.disabled && el.offsetParent !== null);
+  const idx = visible.indexOf(cur);
+  if(idx < 0) return;
+  let nextEl = null;
+  if(isNext){
+    nextEl = visible[idx + 1] || null;
+    // 마지막 input에서 Tab/Enter → 새 줄 추가 (사장님 워크플로우)
+    if(!nextEl && idx === visible.length - 1){
+      // 안전하게: 새 줄 만들지 말고 그냥 머무름
+      return;
+    }
+  } else {
+    nextEl = visible[idx - 1] || null;
+  }
+  if(nextEl){
+    nextEl.focus();
+    // input이면 텍스트 전체 선택
+    if(nextEl.select && nextEl.tagName !== 'SELECT' && nextEl.type !== 'date'){
+      try { nextEl.select(); } catch(e){}
+    }
+  }
 }
 
 function addLine(type, subType){
@@ -4810,6 +5210,12 @@ function addLine(type, subType){
   // 교재비 (교무팀 확인), 패드대여료 (사용량 기반) — 사장님이 환불액 직접 입력 필수
   if(type === '교재비' || (type === '패드비' && sub === '대여료')){
     line.showManual = true;
+  }
+  // ⭐ 새 항목 추가 시 — 첫 줄의 납부일·퇴반일 자동 복사 (사장님 룰 2026.05.18)
+  if(modalState.lines.length > 0){
+    const first = modalState.lines[0];
+    if(first.payDate && !line.payDate) line.payDate = first.payDate;
+    if(first.leaveDate && !line.leaveDate) line.leaveDate = first.leaveDate;
   }
   modalState.lines.push(line);
   renderLines();
@@ -4841,6 +5247,105 @@ function toggleLineManual(tempId){
   if(!line) return;
   line.showManual = !line.showManual;
   renderLines();
+}
+
+// ⭐ 환불액 input 직접 변경 시 — 빠른모달과 동일한 동작 (사장님 룰 2026.05.18)
+// 빈 값 → 자동 계산으로 복귀
+// 숫자 입력 → 수동 모드 자동 (⚠️ 배지 자동 표시)
+function onRefundAmountInput(tempId, value){
+  const line = modalState.lines.find(l=>l.tempId===tempId);
+  if(!line) return;
+  // ₩, 콤마, 기타 문자 제거 후 숫자만 추출
+  const clean = String(value).replace(/[^0-9]/g, '');
+  const wasManual = line.manualRefund != null;
+  // 빈 값 → 자동 계산으로 복귀
+  if(clean === '' || clean === null){
+    line.manualRefund = null;
+  } else {
+    line.manualRefund = parseInt(clean) || 0;
+    // 익월 ON 상태였으면 해제 (충돌 방지)
+    if(line.isNextMonth) line.isNextMonth = false;
+  }
+  const isManualNow = line.manualRefund != null;
+  recalcLine(tempId);
+  updateTotal();
+  // 줄 색상 갱신
+  const wrap = document.querySelector(`.refund-line-compact[data-line-id="${tempId}"]`);
+  if(wrap){
+    if(isManualNow) wrap.classList.add('line-manual');
+    else wrap.classList.remove('line-manual');
+  }
+  const cellWrap = document.getElementById(`lineResult-${tempId}`);
+  if(cellWrap){
+    if(isManualNow) cellWrap.classList.add('manual');
+    else cellWrap.classList.remove('manual');
+  }
+  // 수동 ↔ 자동 전환 시 메모 placeholder 갱신 필요 → renderLines
+  if(wasManual !== isManualNow){
+    renderLines();
+  }
+}
+
+// ⭐ 환불액 input blur 시 — ₩ + 콤마 자동 추가
+function onRefundAmountBlur(tempId, inputEl){
+  const line = modalState.lines.find(l=>l.tempId===tempId);
+  if(!line || !inputEl) return;
+  if(line.manualRefund != null){
+    inputEl.value = '₩' + line.manualRefund.toLocaleString();
+  } else {
+    // 자동 모드 — recalcLine이 자동 계산값을 input에 채워줌
+    recalcLine(tempId);
+  }
+}
+
+// ⭐ 기준액 input 변경 시 — 콤마 제거 후 숫자만
+function onLineFeeInput(tempId, value){
+  const line = modalState.lines.find(l=>l.tempId===tempId);
+  if(!line) return;
+  const clean = String(value).replace(/[^0-9]/g, '');
+  line.fee = parseInt(clean) || 0;
+  // 콤마 자동 갱신은 onblur에서 (입력 중에는 사용자 커서 보호)
+  recalcLine(tempId);
+  updateTotal();
+}
+
+// ⭐ 기준액 input blur 시 — 콤마 자동 추가
+function onLineFeeBlur(tempId, inputEl){
+  const line = modalState.lines.find(l=>l.tempId===tempId);
+  if(!line || !inputEl) return;
+  if(line.fee > 0){
+    inputEl.value = line.fee.toLocaleString();
+  } else {
+    inputEl.value = '';
+  }
+}
+
+// ⭐ 수동 환불액 사용 체크박스 ON/OFF (사장님 룰 2026.05.18)
+// 체크 ON → manualRefund = 현재 자동 계산값으로 초기화 (편집 시작점)
+// 체크 OFF → manualRefund = null (자동 계산으로 복귀)
+function toggleManualValueOn(tempId, checked){
+  const line = modalState.lines.find(l=>l.tempId===tempId);
+  if(!line) return;
+  if(checked){
+    // 현재 자동 계산값 가져와서 수동값 초기치로 (사장님이 편집하기 쉽게)
+    const isNewbie = document.getElementById('fNewbie').checked;
+    const c = calcLine(line, isNewbie);
+    line.manualRefund = (c && c.refund > 0) ? c.refund : 0;
+    if(!line.manualReason) line.manualReason = '';
+    // 익월 ON 상태였으면 해제 (충돌 방지)
+    if(line.isNextMonth) line.isNextMonth = false;
+  } else {
+    line.manualRefund = null;
+    line.manualReason = '';
+  }
+  renderLines();
+  // 수동 ON 시 환불액 input으로 자동 포커스
+  if(checked){
+    setTimeout(() => {
+      const inp = document.querySelector(`.refund-line-compact[data-line-id="${tempId}"] .line-refund-input`);
+      if(inp){ inp.focus(); inp.select(); }
+    }, 50);
+  }
 }
 
 // ⭐ 교재 미배부 자동 가져오기 (환불 추가 모달)
@@ -5074,20 +5579,64 @@ function recalcLine(tempId){
   }
   const resultEl = document.getElementById(`lineResult-${tempId}`);
   if(!resultEl) return;
-  if(line.manualRefund != null){
-    resultEl.classList.add('manual');
-    resultEl.querySelector('.line-result-rule').textContent = '⚠️ 수동';
-    resultEl.querySelector('.line-result-amount').textContent = '₩'+parseInt(line.manualRefund).toLocaleString();
-  } else if(c){
-    resultEl.classList.remove('manual');
-    resultEl.querySelector('.line-result-rule').textContent = c.rule;
-    resultEl.querySelector('.line-result-amount').textContent = '₩'+c.refund.toLocaleString();
+  // ⭐ 새 컴팩트 구조: line-refund-cell-wrap 안에 input + (수동시) 배지
+  const refundInput = resultEl.querySelector('.line-refund-input');
+  if(refundInput){
+    // input이 포커스 중이 아닐 때만 갱신 (사용자 입력 보호)
+    const isFocused = document.activeElement === refundInput;
+    if(line.manualRefund != null){
+      // 수동 모드: input에 ₩ + 콤마
+      resultEl.classList.add('manual');
+      if(!isFocused){
+        refundInput.value = '₩' + parseInt(line.manualRefund).toLocaleString();
+      }
+      // ⚠️ 배지 추가 (없으면)
+      if(!resultEl.querySelector('.line-manual-badge')){
+        const b = document.createElement('span');
+        b.className = 'line-manual-badge';
+        b.title = '수동 입력 (특이사항)';
+        b.textContent = '⚠️';
+        resultEl.appendChild(b);
+      }
+    } else if(c && c.refund > 0){
+      // 자동 모드: ₩ + 콤마
+      resultEl.classList.remove('manual');
+      if(!isFocused){
+        refundInput.value = '₩' + c.refund.toLocaleString();
+      }
+      // 배지 제거
+      const badge = resultEl.querySelector('.line-manual-badge');
+      if(badge) badge.remove();
+    } else {
+      // 계산 불가 (날짜·기준액 입력 대기)
+      resultEl.classList.remove('manual');
+      if(!isFocused){
+        refundInput.value = '';
+      }
+      const badge = resultEl.querySelector('.line-manual-badge');
+      if(badge) badge.remove();
+    }
   } else {
-    resultEl.querySelector('.line-result-rule').textContent = '입력 부족';
-    resultEl.querySelector('.line-result-amount').textContent = '—';
+    // 옛 구조 호환 (table에 span)
+    const ruleEl = resultEl.querySelector('.line-result-rule');
+    const amountEl = resultEl.querySelector('.line-result-amount');
+    if(line.manualRefund != null){
+      resultEl.classList.add('manual');
+      if(ruleEl) ruleEl.textContent = '';
+      if(amountEl) amountEl.textContent = parseInt(line.manualRefund).toLocaleString();
+    } else if(c){
+      resultEl.classList.remove('manual');
+      if(ruleEl) ruleEl.textContent = '';
+      if(amountEl) amountEl.textContent = c.refund.toLocaleString();
+    } else {
+      if(ruleEl) ruleEl.textContent = '';
+      if(amountEl) amountEl.textContent = '—';
+    }
   }
-  // 재결제 금액 input이 화면에 있으면 갱신
-  const rechargeInput = document.querySelector(`.line[data-tid="${tempId}"] input[oninput*="rechargeAmount"]`);
+  // 재결제 금액 input이 화면에 있으면 갱신 (새 컴팩트 구조 + 옛 구조 둘 다 호환)
+  const rechargeInput = 
+    document.querySelector(`.refund-line-compact[data-line-id="${tempId}"] .line-recharge-input`) ||
+    document.querySelector(`.line[data-tid="${tempId}"] input[oninput*="rechargeAmount"]`);
   if(rechargeInput && !line._rechargeManuallyEdited){
     rechargeInput.value = line.rechargeAmount || '';
   }
@@ -5186,165 +5735,91 @@ function renderLines(){
         lineBounceLabel = '<span class="line-fix-label">✓ 수정 답변 작성됨</span>';
       }
     }
-    html += `<div class="refund-line ${isManualLine?'line-manual':''}${lineBounceClass}">
-      <div class="line-head">
-        <div class="line-title">
-          <span class="line-num">#${idx+1}</span>
-          <select onchange="changeLineType(${line.tempId}, this.value)" style="font-size:13px;font-weight:700;border:1px solid var(--border);border-radius:5px;padding:3px 8px;font-family:inherit">
-            ${['수강료','급식비','학사비','교재비','패드비'].map(t => 
-              `<option value="${t}" ${t===line.type?'selected':''}>${t}</option>`
-            ).join('')}
+    html += `<div class="refund-line-compact ${isManualLine?'line-manual':''}${lineBounceClass}" data-line-id="${line.tempId}">
+      <!-- 메인 한 줄: #/유형/구분/[방식/방]/납부/퇴반/기준액/결제/환불액(자동기본,수동입력)/익월/메모/✕ -->
+      <div class="line-main-row">
+        <span class="line-num">#${idx+1}</span>
+        <select class="line-sel-type modal-line-input" data-line="${line.tempId}" data-field="type" onchange="changeLineType(${line.tempId}, this.value)" onkeydown="handleLineInputKey(event,${line.tempId})">
+          ${['수강료','급식비','학사비','교재비','패드비'].map(t => 
+            `<option value="${t}" ${t===line.type?'selected':''}>${t}</option>`
+          ).join('')}
+        </select>
+        ${subs.length > 0 ? `
+          <select class="line-sel-sub modal-line-input" data-line="${line.tempId}" data-field="subType" onchange="changeLineSubType(${line.tempId},this.value)" onkeydown="handleLineInputKey(event,${line.tempId})">
+            ${subs.map(s => `<option value="${s}" ${s===line.subType?'selected':''}>${s}</option>`).join('')}
           </select>
-          ${subs.length > 0 ? `
-            <select onchange="changeLineSubType(${line.tempId},this.value)" style="font-size:12px;border:1px solid var(--border);border-radius:5px;padding:3px 8px;font-family:inherit">
-              ${subs.map(s => `<option value="${s}" ${s===line.subType?'selected':''}>${s}</option>`).join('')}
-            </select>
-          ` : ''}
-          ${(line.type === '학사비' && line.subType === '정규학사' && (settings.academyRooms||[]).length > 0) ? `
-            <select onchange="changeAcademyRoom(${line.tempId},this.value)" style="font-size:12px;border:1px solid var(--border);border-radius:5px;padding:3px 8px;font-family:inherit;background:#fff7ed" title="방을 선택하면 기준액이 자동으로 채워져요">
-              <option value="">방 선택...</option>
-              ${(settings.academyRooms||[]).map(rm => 
-                `<option value="${rm.price}" ${(line.fee==rm.price)?'selected':''}>${rm.name} (${rm.price.toLocaleString()})</option>`
-              ).join('')}
-            </select>
-          ` : ''}
-          ${lineBounceLabel}
-        </div>
-        <button class="line-remove" onclick="removeLine(${line.tempId})" title="${lineBounceClass?'반송/수정 진행 중인 줄은 삭제 불가':'이 항목 삭제'}"${lineBounceClass?' disabled':''}>×</button>
-      </div>
-      <div class="line-grid">
-        <div class="field-mini">
-          <label>납부일</label>
-          <input type="date" value="${line.payDate||''}" oninput="updateLineField(${line.tempId},'payDate',this.value)" />
-        </div>
-        <div class="field-mini">
-          <label>퇴반일</label>
-          <input type="date" value="${line.leaveDate||''}" oninput="updateLineField(${line.tempId},'leaveDate',this.value)" />
-        </div>
-        <div class="field-mini">
-          <label>기준액</label>
-          <input type="number" value="${line.fee||''}" placeholder="0" oninput="updateLineField(${line.tempId},'fee',parseInt(this.value)||0)" />
-        </div>
-        <div class="field-mini">
-          <label>결제 ${isLocked?'<span class="muted tiny">(잠김)</span>':''}</label>
-          <select ${isLocked?'disabled':''} onchange="updateLineField(${line.tempId},'method',this.value)">
-            <option value="무통장" ${line.method==='무통장'?'selected':''}>무통장</option>
-            <option value="카드" ${line.method==='카드'?'selected':''}>카드</option>
+        ` : '<span class="line-sub-empty">─</span>'}
+        ${(line.type === '수강료' && (line.subType === '특강' || line.subType === '논술')) ? `
+          <select class="line-sel-mode modal-line-input" data-line="${line.tempId}" data-field="refundMode" onchange="updateLineField(${line.tempId},'refundMode',this.value)" onkeydown="handleLineInputKey(event,${line.tempId})" title="${line.subType} 환불 방식">
+            <option value="thirds" ${(line.refundMode||'thirds')==='thirds'?'selected':''}>기간</option>
+            <option value="proportional" ${line.refundMode==='proportional'?'selected':''}>횟수</option>
           </select>
+        ` : ''}
+        <input type="text" class="modal-line-input modal-date-input line-input-date" data-line="${line.tempId}" data-field="payDate" value="${fmtDateShort(line.payDate)}" placeholder="납부일" title="납부일 (예: 5/1)" oninput="onLineDateInput(${line.tempId},'payDate',this.value)" onblur="onLineDateBlur(${line.tempId},'payDate',this)" onkeydown="handleLineInputKey(event,${line.tempId})" />
+        <input type="text" class="modal-line-input modal-date-input line-input-date" data-line="${line.tempId}" data-field="leaveDate" value="${fmtDateShort(line.leaveDate)}" placeholder="퇴반일" title="퇴반일 (예: 5/18)" oninput="onLineDateInput(${line.tempId},'leaveDate',this.value)" onblur="onLineDateBlur(${line.tempId},'leaveDate',this)" onkeydown="handleLineInputKey(event,${line.tempId})" />
+        <input type="text" class="modal-line-input line-input-fee" data-line="${line.tempId}" data-field="fee" value="${line.fee ? line.fee.toLocaleString() : ''}" placeholder="기준액" title="기준액 (납부 금액)" inputmode="numeric" oninput="onLineFeeInput(${line.tempId}, this.value)" onfocus="this.value=this.value.replace(/,/g,'')" onblur="onLineFeeBlur(${line.tempId}, this)" onkeydown="handleLineInputKey(event,${line.tempId})" />
+        <select class="modal-line-input line-sel-method" data-line="${line.tempId}" data-field="method" ${isLocked?'disabled':''} onchange="updateLineField(${line.tempId},'method',this.value)" onkeydown="handleLineInputKey(event,${line.tempId})" title="${isLocked?'결제수단 자동 잠김':'결제수단'}">
+          <option value="무통장" ${line.method==='무통장'?'selected':''}>무통장</option>
+          <option value="카드" ${line.method==='카드'?'selected':''}>카드</option>
+        </select>
+        <!-- ⭐ 환불액 input — 자동 계산값 자동 표시, 사장님이 직접 입력하면 수동 (빠른모달과 동일) -->
+        <div class="line-refund-cell-wrap ${isManualLine?'manual':''}" id="lineResult-${line.tempId}">
+          <input type="text" class="line-refund-input modal-line-input" data-line="${line.tempId}" data-field="refundAmount" value="${line.manualRefund != null ? '₩' + line.manualRefund.toLocaleString() : ''}" placeholder="환불액" title="자동 계산값이 자동으로 들어옵니다. 직접 입력 시 수동 모드 (⚠️ 배지)" inputmode="numeric" oninput="onRefundAmountInput(${line.tempId}, this.value)" onfocus="this.value=this.value.replace(/[₩,]/g,'')" onblur="onRefundAmountBlur(${line.tempId}, this)" onkeydown="handleLineInputKey(event,${line.tempId})" />
+          ${isManualLine ? '<span class="line-manual-badge" title="수동 입력 (특이사항)">⚠️</span>' : ''}
         </div>
-      </div>
-      ${qItemSupportsNextMonth({type:line.type, subType:line.subType}) ? `
-        <div class="line-next-month-mode${line.isNextMonth?' on':''}">
-          <label class="next-month-toggle">
+        ${qItemSupportsNextMonth({type:line.type, subType:line.subType}) ? `
+          <label class="line-next-chk" title="익월 전액 환불 (다음 달 미수강분 100% — 날짜 무시)">
             <input type="checkbox" ${line.isNextMonth?'checked':''} onchange="toggleNextMonth(${line.tempId}, this.checked)" />
-            <span><b>익월 전액 환불</b> <span class="muted tiny">(다음 달 미수강분 100%)</span></span>
+            <span class="line-next-label">익월</span>
           </label>
-        </div>
-      ` : ''}
-      ${(line.type === '수강료' && (line.subType === '특강' || line.subType === '논술')) ? `
-        <div class="line-special-mode">
-          <div class="special-fields">
-            <div class="field-mini">
-              <label>강좌명</label>
-              <input type="text" value="${line.className||''}" placeholder="예: 수능특강 수학" oninput="updateLineField(${line.tempId},'className',this.value)" />
-            </div>
-            <div class="field-mini">
-              <label>방식</label>
-              <select onchange="updateLineField(${line.tempId},'refundMode',this.value)">
-                <option value="thirds" ${(line.refundMode||'thirds')==='thirds'?'selected':''}>기간</option>
-                <option value="proportional" ${line.refundMode==='proportional'?'selected':''}>횟수</option>
-              </select>
-            </div>
-            <div class="field-mini">
-              <label>전체 횟수</label>
-              <input type="number" value="${line.totalSessions||''}" placeholder="─" oninput="updateLineField(${line.tempId},'totalSessions',parseInt(this.value)||0)" />
-            </div>
-            <div class="field-mini">
-              <label>들은 횟수</label>
-              <input type="number" value="${line.attendedSessions||''}" placeholder="─" oninput="updateLineField(${line.tempId},'attendedSessions',parseInt(this.value)||0)" />
-            </div>
-          </div>
-          <div class="special-hint">
-            ${(line.refundMode||'thirds') === 'thirds'
-              ? '<b>기간</b> = 학원까지 그만두기 (일수 1/3 룰)'
-              : '<b>횟수</b> = ' + line.subType + '만 취소 (학원은 계속 다님, 횟수 비례)'}
-          </div>
-        </div>
-      ` : ''}
-      <div class="line-result ${isManualLine?'manual':''}" id="lineResult-${line.tempId}">
-        <span class="line-result-rule">—</span>
-        <span class="line-result-amount">—</span>
+        ` : '<span class="line-next-placeholder"></span>'}
+        <input type="text" class="line-memo-inline modal-line-input" data-line="${line.tempId}" data-field="memo" placeholder="메모 (선택)" value="${line.memo||''}" oninput="updateLineField(${line.tempId},'memo',this.value)" onkeydown="handleLineInputKey(event,${line.tempId})" id="memo-${line.tempId}" />
+        <button class="line-remove-btn" onclick="removeLine(${line.tempId})" title="${lineBounceClass?'반송/수정 진행 중인 줄은 삭제 불가':'이 항목 삭제'}"${lineBounceClass?' disabled':''}>✕</button>
       </div>
+      ${lineBounceLabel ? `<div class="line-bounce-row">${lineBounceLabel}</div>` : ''}
+      <!-- 특강·논술 횟수 모드: 강좌명·전체·들은 횟수 (proportional일 때만) -->
+      ${(line.type === '수강료' && (line.subType === '특강' || line.subType === '논술') && line.refundMode === 'proportional') ? `
+        <div class="line-sub-row special-mode">
+          <input type="text" placeholder="강좌명" value="${line.className||''}" style="font-size:11.5px;border:1px solid var(--border);border-radius:4px;padding:2px 6px;width:180px" oninput="updateLineField(${line.tempId},'className',this.value)" />
+          <input type="number" placeholder="전체 횟수" value="${line.totalSessions||''}" style="font-size:11.5px;border:1px solid var(--border);border-radius:4px;padding:2px 6px;width:90px" oninput="updateLineField(${line.tempId},'totalSessions',parseInt(this.value)||0)" />
+          <input type="number" placeholder="들은 횟수" value="${line.attendedSessions||''}" style="font-size:11.5px;border:1px solid var(--border);border-radius:4px;padding:2px 6px;width:90px" oninput="updateLineField(${line.tempId},'attendedSessions',parseInt(this.value)||0)" />
+        </div>
+      ` : ''}
+      <!-- 교재비: 미배부 가져오기 + 책 목록 -->
       ${line.type === '교재비' ? `
-        <div class="line-book-area">
-          <button class="line-book-btn" onclick="fetchBookUnissued(${line.tempId})" title="교재 프로그램에서 미배부 교재 자동 가져오기">
-            📚 교재 미배부 가져오기
-          </button>
+        <div class="line-sub-row line-book-sub">
+          <button class="line-book-btn" onclick="fetchBookUnissued(${line.tempId})" title="교재 프로그램에서 미배부 교재 자동 가져오기">📚 교재 미배부 가져오기</button>
           ${line.bookData && line.bookData.books ? `
-            <div class="line-book-list">
-              <div class="line-book-header">
-                <button class="line-book-toggle" onclick="toggleBookExpand(${line.tempId})">
-                  ${line.bookExpanded ? '▴' : '▾'} 📚 교재 ${line.bookData.books.length}권 미배부
-                </button>
-                <span class="line-book-total">₩${(line.bookData.totalSelected || line.bookData.total).toLocaleString()}</span>
-              </div>
-              ${line.bookExpanded ? `
-                <div class="line-book-items">
-                  ${line.bookData.books.map((b, i) => `
-                    <label class="line-book-item">
-                      <input type="checkbox" ${(line.bookData.selected || []).includes(i) ? 'checked' : ''} onchange="toggleBookCheck(${line.tempId}, ${i}, this.checked)" />
-                      <span class="line-book-name">${qEscape(b.title)}</span>
-                      <span class="line-book-price">₩${b.price.toLocaleString()}</span>
-                    </label>
-                  `).join('')}
-                </div>
-              ` : ''}
-            </div>
+            <button class="line-book-toggle" onclick="toggleBookExpand(${line.tempId})">
+              ${line.bookExpanded ? '▴' : '▾'} ${line.bookData.books.length}권
+            </button>
+            <span class="line-book-total">₩${(line.bookData.totalSelected || line.bookData.total).toLocaleString()}</span>
           ` : ''}
         </div>
+        ${(line.bookData && line.bookData.books && line.bookExpanded) ? `
+          <div class="line-book-items">
+            ${line.bookData.books.map((b, i) => `
+              <label class="line-book-item">
+                <input type="checkbox" ${(line.bookData.selected || []).includes(i) ? 'checked' : ''} onchange="toggleBookCheck(${line.tempId}, ${i}, this.checked)" />
+                <span class="line-book-name">${qEscape(b.title)}</span>
+                <span class="line-book-price">₩${b.price.toLocaleString()}</span>
+              </label>
+            `).join('')}
+          </div>
+        ` : ''}
       ` : ''}
-      <button class="line-toggle-manual" onclick="toggleLineManual(${line.tempId})">
-        ${line.showManual ? '▴' : '▾'} ⚠️ 수동 환불액 ${isManualLine ? '(적용 중)' : ''}
-      </button>
-      <div class="line-manual-row ${line.showManual?'show':''}">
-        <input type="number" placeholder="수동값" value="${line.manualRefund||''}" oninput="updateLineManualRefund(${line.tempId}, this.value)" />
-        <input type="text" placeholder="사유 (필수)" value="${line.manualReason||''}" oninput="updateLineField(${line.tempId},'manualReason',this.value)" id="manualReason-${line.tempId}" />
-      </div>
-      ${line.showManual ? `
-        <div class="manual-reason-chips">
-          <span class="muted tiny" style="margin-right:6px">자주 쓰는 사유:</span>
-          <button class="reason-chip" onclick="setManualReason(${line.tempId},'말일 퇴반 (익월 전액)')">말일 퇴반</button>
-          <button class="reason-chip" onclick="setManualReason(${line.tempId},'1일 퇴반 (등원 X, 당월 전액)')">1일 퇴반</button>
-          <button class="reason-chip" onclick="setManualReason(${line.tempId},'연락두절 후 늦은 퇴원')">연락두절</button>
-          <button class="reason-chip" onclick="setManualReason(${line.tempId},'감염병 격리')">감염병</button>
-          <button class="reason-chip" onclick="setManualReason(${line.tempId},'급식 부분 취소 (중·석식)')">급식 부분</button>
-          <button class="reason-chip" onclick="setManualReason(${line.tempId},'제적 처리')">제적</button>
-          <button class="reason-chip" onclick="setManualReason(${line.tempId},'패드 파손 (교무팀 견적)')">패드 파손</button>
-          <button class="reason-chip" onclick="setManualReason(${line.tempId},'학부모 합의')">학부모 합의</button>
-        </div>
-      ` : ''}
+      <!-- 카드 재결제 (카드일 때만) -->
       ${line.method === '카드' ? `
-        <div class="line-recharge ${line.rechargeNeeded?'on':''}">
-          <label class="recharge-toggle">
+        <div class="line-recharge-row">
+          <label class="line-recharge-chk">
             <input type="checkbox" ${line.rechargeNeeded?'checked':''} onchange="toggleRecharge(${line.tempId}, this.checked)" />
-            <span>💳 <b>카드 묶음 재결제 필요</b> <span class="muted tiny">(부분취소 안 되는 경우)</span></span>
+            <span>💳 카드 묶음 재결제 필요</span>
           </label>
           ${line.rechargeNeeded ? `
-            <div class="recharge-row">
-              <div class="field-mini" style="flex:1">
-                <label>재결제 금액</label>
-                <input type="number" placeholder="자동: 기준액 - 환불액" value="${line.rechargeAmount||''}" oninput="updateRechargeAmount(${line.tempId}, this.value)" />
-              </div>
-              <div class="recharge-hint">
-                <span class="muted tiny">학부모 재결제 후 [완료] 클릭 → 아카에서 원래 카드 전액 취소</span>
-              </div>
-            </div>
+            <input type="number" class="line-recharge-input" placeholder="재결제 금액 (자동)" value="${line.rechargeAmount||''}" oninput="updateRechargeAmount(${line.tempId}, this.value)" />
           ` : ''}
         </div>
       ` : ''}
-      <div class="line-memo">
-        <input type="text" placeholder="메모 (예: 원장님 확인)" value="${line.memo||''}" oninput="updateLineField(${line.tempId},'memo',this.value)" />
-      </div>
     </div>`;
   });
   wrap.innerHTML = html;
@@ -5435,14 +5910,29 @@ function changeAcademyRoom(tempId, priceStr){
 function updateLineManualRefund(tempId, value){
   const line = modalState.lines.find(l=>l.tempId===tempId);
   if(!line) return;
+  const wasManual = line.manualRefund != null;
   line.manualRefund = value === '' ? null : (parseInt(value) || 0);
+  const isManualNow = line.manualRefund != null;
+  // ⭐ 수동 입력 시 익월 자동 해제 (사장님 룰 — 충돌 방지)
+  if(isManualNow && line.isNextMonth){
+    line.isNextMonth = false;
+  }
   recalcLine(tempId);
   updateTotal();
-  // 줄 색상 갱신
-  if(line.manualRefund != null){
-    document.querySelector(`#lineResult-${tempId}`).closest('.refund-line').classList.add('line-manual');
-  } else {
-    document.querySelector(`#lineResult-${tempId}`).closest('.refund-line').classList.remove('line-manual');
+  // 줄 색상 갱신 (compact 또는 일반 클래스 둘 다 처리)
+  const resultEl = document.querySelector(`#lineResult-${tempId}`);
+  if(resultEl){
+    const parent = resultEl.closest('.refund-line-compact') || resultEl.closest('.refund-line');
+    if(parent){
+      if(isManualNow) parent.classList.add('line-manual');
+      else parent.classList.remove('line-manual');
+    }
+    if(isManualNow) resultEl.classList.add('manual');
+    else resultEl.classList.remove('manual');
+  }
+  // ⭐ 수동 → 자동 전환 또는 익월 해제 시 UI 다시 그림
+  if(wasManual !== isManualNow){
+    renderLines();
   }
 }
 
@@ -5476,7 +5966,8 @@ function saveModalAll(){
     const line = modalState.lines[i];
     if(!line.type){ toast('#'+(i+1)+' 유형을 선택해주세요'); return; }
     if(!line.fee || line.fee <= 0){ toast('#'+(i+1)+' 기준액을 입력해주세요'); return; }
-    if(line.manualRefund != null && !line.manualReason){ toast('#'+(i+1)+' 수동 환불액 사용 시 사유 필수'); return; }
+    // ⭐ 수동 사유 필수 X (빠른모달과 동일, 사장님 룰 2026.05.18)
+    // 사장님이 메모에 필요할 때만 적음. 메모는 line.memo에 저장됨.
   }
   try {
     _doSaveModalAll();
@@ -5683,6 +6174,44 @@ function _doSaveModalAll(){
   }
   const cnt = modalState.lines.length;
   const wasApproveMode = !!modalState._approveAfterSave;
+  // ⭐ "저장 후 계속 입력" 체크 시 모달 닫지 않고 학생 정보만 초기화
+  const keepOpen = !wasApproveMode && document.getElementById('modalKeepOpenChk') && document.getElementById('modalKeepOpenChk').checked;
+  if(keepOpen){
+    // 학생 정보 + 줄 모두 초기화 (다음 학생 입력 가능)
+    modalState.name = '';
+    modalState.studentId = '';
+    modalState.holder = '';
+    modalState.bank = '';
+    modalState.account = '';
+    modalState.reason = null;
+    modalState.memo = '';
+    modalState.lines = [];
+    modalState._approveAfterSave = false;
+    // 입력 필드도 비우기
+    const nameEl = document.getElementById('fName');
+    const holderEl = document.getElementById('fHolder');
+    const bankEl = document.getElementById('fBank');
+    const acctEl = document.getElementById('fAccount');
+    const memoEl = document.getElementById('fMemo');
+    const newbieEl = document.getElementById('fNewbie');
+    if(nameEl) nameEl.value = '';
+    if(holderEl) holderEl.value = '';
+    if(bankEl) bankEl.value = '';
+    if(acctEl) acctEl.value = '';
+    if(memoEl) memoEl.value = '';
+    if(newbieEl) newbieEl.checked = false;
+    // 환불 사유 버튼 active 해제
+    document.querySelectorAll('.reason-btn').forEach(b => b.classList.remove('active'));
+    // 줄 다시 그리기 (빈 상태)
+    renderLines();
+    // 학생 이름 칸으로 포커스
+    setTimeout(() => { if(nameEl) nameEl.focus(); }, 50);
+    toast(cnt + '건 저장 완료 — 다음 학생 입력하세요');
+    // 메인 시트도 새로 그려서 방금 저장된 행 보이게
+    save();
+    render();
+    return;
+  }
   closeAddModal();
   toast(cnt + '건 저장 완료' + (wasApproveMode ? ' (승인됨)' : ''));
 }
@@ -7175,7 +7704,7 @@ function qRenderRow(row, idx, needsDate, supportsNewbie){
         <option value="무통장" ${curMethod==='무통장'?'selected':''}>무통장</option>
         <option value="카드" ${curMethod==='카드'?'selected':''}>카드</option>
       </select></td>`;
-      html += `<td class="q-cell-money"><input type="number" class="q-fee-input" data-row="${row.tempId}" data-item="${it.id}" data-field="fee-${it.id}" value="${fee != null ? fee : ''}" placeholder="0" oninput="qUpdateFee(${row.tempId},'${it.id}',this.value)" onchange="qUpdateFee(${row.tempId},'${it.id}',this.value)" onblur="qUpdateFee(${row.tempId},'${it.id}',this.value)" /></td>`;
+      html += `<td class="q-cell-money"><input type="text" inputmode="numeric" class="q-fee-input" data-row="${row.tempId}" data-item="${it.id}" data-field="fee-${it.id}" value="${fee != null ? fee.toLocaleString() : ''}" placeholder="0" oninput="qUpdateFee(${row.tempId},'${it.id}',this.value)" onfocus="this.value=this.value.replace(/,/g,'')" onblur="qOnFeeBlur(${row.tempId},'${it.id}',this)" /></td>`;
       // ⭐ 특강·논술 = 강좌명/방식/전체회/들은회 입력 셀 추가
       if(it.isSpecial){
         const className = (row.className && row.className[it.id]) || '';
@@ -7194,7 +7723,7 @@ function qRenderRow(row, idx, needsDate, supportsNewbie){
         html += `<td class="q-cell-sess"><input type="number" class="q-sess-input" data-row="${row.tempId}" data-item="${it.id}" data-field="attendedSessions-${it.id}" value="${attSess || ''}" placeholder="─" oninput="qUpdateSessions(${row.tempId},'${it.id}','attended',this.value)" /></td>`;
       }
     } else {
-      html += `<td class="q-cell-money"><input type="number" class="q-fee-input" data-row="${row.tempId}" data-item="${it.id}" data-field="fee-${it.id}" value="${fee != null ? fee : ''}" placeholder="0" oninput="qUpdateFee(${row.tempId},'${it.id}',this.value)" onchange="qUpdateFee(${row.tempId},'${it.id}',this.value)" onblur="qUpdateFee(${row.tempId},'${it.id}',this.value)" /></td>`;
+      html += `<td class="q-cell-money"><input type="text" inputmode="numeric" class="q-fee-input" data-row="${row.tempId}" data-item="${it.id}" data-field="fee-${it.id}" value="${fee != null ? fee.toLocaleString() : ''}" placeholder="0" oninput="qUpdateFee(${row.tempId},'${it.id}',this.value)" onfocus="this.value=this.value.replace(/,/g,'')" onblur="qOnFeeBlur(${row.tempId},'${it.id}',this)" /></td>`;
     }
     // 항목별 환불액 셀 (클릭하면 수동 변경) + 익월 토글 (수강료/학사비/급식비만)
     const isNextMonth = !!(row.nextMonth && row.nextMonth[it.id]);
@@ -7387,6 +7916,17 @@ function qUpdateFee(tempId, itemId, value){
   }
   qRefreshRow(row);
   qUpdateTotalBox();
+}
+
+// ⭐ 빠른모달 기준액 input blur — 콤마 자동 추가 (사장님 룰 2026.05.18)
+function qOnFeeBlur(tempId, itemId, inputEl){
+  const row = qState.rows.find(r => r.tempId === tempId);
+  if(!row || !inputEl) return;
+  // 먼저 값 업데이트
+  qUpdateFee(tempId, itemId, inputEl.value);
+  // 콤마 추가해서 표시
+  const fee = row.fees[itemId];
+  inputEl.value = (fee != null && fee !== 0) ? fee.toLocaleString() : (fee === 0 ? '0' : '');
 }
 
 // 익월 전액 토글 (수강료/학사비/급식비)
@@ -8369,10 +8909,50 @@ function searchBank(){
     list.classList.remove('show');
     return;
   }
-  list.innerHTML = matches.map(b => 
-    `<div class="search-item" onmousedown="pickBank('${b.display.replace(/'/g,"\\'")}')">${b.display}</div>`
+  list.innerHTML = matches.map((b, i) => 
+    `<div class="search-item${i===0?' active':''}" data-idx="${i}" data-bank="${b.display.replace(/"/g,'&quot;')}" onmousedown="pickBank('${b.display.replace(/'/g,"\\'")}')">${b.display}</div>`
   ).join('');
   list.classList.add('show');
+}
+
+// ⭐ 은행 드롭다운 키보드 이동 (사장님 룰 2026.05.18)
+function handleBankKeydown(e){
+  const list = document.getElementById('bankList');
+  if(!list || !list.classList.contains('show')) return false;  // 드롭다운 닫혀있으면 무시
+  const items = list.querySelectorAll('.search-item');
+  if(items.length === 0) return false;
+  const cur = list.querySelector('.search-item.active');
+  let idx = cur ? Array.from(items).indexOf(cur) : -1;
+  if(e.key === 'ArrowDown'){
+    e.preventDefault();
+    idx = (idx + 1) % items.length;
+    items.forEach(it => it.classList.remove('active'));
+    items[idx].classList.add('active');
+    items[idx].scrollIntoView({block:'nearest'});
+    return true;
+  }
+  if(e.key === 'ArrowUp'){
+    e.preventDefault();
+    idx = (idx - 1 + items.length) % items.length;
+    items.forEach(it => it.classList.remove('active'));
+    items[idx].classList.add('active');
+    items[idx].scrollIntoView({block:'nearest'});
+    return true;
+  }
+  if(e.key === 'Enter'){
+    e.preventDefault();
+    if(idx >= 0){
+      const bank = items[idx].dataset.bank;
+      if(bank) pickBank(bank);
+    }
+    return true;
+  }
+  if(e.key === 'Escape'){
+    e.preventDefault();
+    list.classList.remove('show');
+    return true;
+  }
+  return false;
 }
 
 function pickBank(name){
@@ -8498,8 +9078,11 @@ async function searchStudent(){
   }
   const rawQ = fNameInp.value.trim();
   console.log('[search] searchStudent 호출 — 입력값:', JSON.stringify(rawQ));
-  // ⭐ 빈 칸이어도 Firebase 학생 목록은 표시 (포커스만 줘도 드롭다운)
-  // 단 로컬에서 빈 검색은 의미 없으니 빈 학생 목록으로 처리
+  // ⭐ 사장님 룰 2026.05.18 — 빈 칸이면 드롭다운 닫기 (검색 시작할 때만 열림)
+  if(!rawQ){
+    list.classList.remove('show');
+    return;
+  }
   const q = rawQ.toLowerCase();
   const isInitial = isInitialQuery(rawQ);
   console.log('[search] 초성 모드:', isInitial);
@@ -8672,21 +9255,9 @@ function checkExistingPending(){
 }
 
 function updateStudentBadge(){
-  const name = document.getElementById('fName').value.trim();
+  // ⭐ 사장님 룰 (2026.05.18) — 안내 메시지 영구 숨김 (모달 공간 절약)
   const label = document.getElementById('studentInfoLabel');
-  const text = document.getElementById('studentInfoText');
-  if(!label) return;
-  if(!name){ label.style.display='none'; return; }
-  const existing = Object.values(students).find(s => s.name === name);
-  if(existing){
-    label.style.display = 'block';
-    label.style.color = 'var(--success)';
-    text.innerHTML = '✓ 기존 학생 — 계좌 정보 자동으로 채워졌어요';
-  } else {
-    label.style.display = 'block';
-    label.style.color = 'var(--accent)';
-    text.innerHTML = '🆕 처음 보는 학생 — 정보 입력하면 다음 환불부턴 자동으로 떠요';
-  }
+  if(label) label.style.display = 'none';
 }
 
 function updateAccountRequired(){
