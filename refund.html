@@ -7369,26 +7369,36 @@ async function qOnNameInput(tempId, value){
   if(!firebaseStudents){
     console.warn('[학생검색] Firebase 실패 → localStorage 사용');
     firebaseStudents = Object.values(students || {}).map(st => ({
+      rawName: st.name,
       name: st.name,
+      displayName: st.name,
       studentId: st.studentId || '',
+      grade: '',
       initials: extractInitials(st.name || ''),
-      lowerName: (st.name || '').toLowerCase()
+      initialsFull: extractInitials(st.name || ''),
+      lowerName: (st.name || '').toLowerCase(),
+      lowerFull: (st.name || '').toLowerCase()
     }));
   }
 
-  // 필터링
+  // 필터링 — 순수 이름과 풀네임(학년·학번 포함) 둘 다 검사
   const seen = new Set();
   const matches = [];
   firebaseStudents.forEach(st => {
     if(!st || !st.name) return;
     let isMatch = false;
     if(isInitial){
+      // 자음 검색 (ㄱㅇㅇ → 강연웅)
       if(st.initials.includes(q)) isMatch = true;
+      else if(st.initialsFull.includes(q)) isMatch = true;
     } else {
+      // 일반 검색 — 순수 이름, 풀네임, 학번 모두 검사
       if(st.lowerName.includes(q)) isMatch = true;
+      else if(st.lowerFull.includes(q)) isMatch = true;
+      else if(st.studentId && st.studentId.includes(q)) isMatch = true;
     }
     if(isMatch){
-      const k = st.name + '|' + (st.studentId || '');
+      const k = st.rawName;
       if(!seen.has(k)){ seen.add(k); matches.push(st); }
     }
   });
@@ -7407,16 +7417,21 @@ async function qOnNameInput(tempId, value){
   dd.className = 'q-dropdown';
   dd.dataset.row = tempId;
   dd.innerHTML = matches.slice(0, 8).map((m, i) => {
-    // 학번 표시 (있으면)
-    const sidLabel = m.studentId ? `<span style="color:#888;margin-left:4px">${m.studentId}</span>` : '';
+    // 학년·학번 라벨 (있으면)
+    const labelParts = [];
+    if(m.grade) labelParts.push(m.grade + '학년');
+    if(m.studentId) labelParts.push(m.studentId);
+    const subLabel = labelParts.length > 0
+      ? `<span style="color:#888;margin-left:6px;font-size:11px">${labelParts.join(' · ')}</span>`
+      : '';
     // ⭐ 과거 환불 이력에서 계좌 정보 가져오기 (드롭다운 미리보기용)
-    const pastAcct = qFindPastAccount(m.name);
+    const pastAcct = qFindPastAccount(m.name, m.studentId);
     const acctInfo = pastAcct
       ? `${pastAcct.holder||'-'} / ${pastAcct.bank||'-'} / ${pastAcct.account||'-'}`
       : '<span style="color:#aaa">과거 환불 이력 없음 — 계좌 직접 입력</span>';
-    const key = m.name + '|' + (m.studentId || '');
-    return `<div class="q-dropdown-item ${i===0?'active':''}" data-idx="${i}" data-key="${key.replace(/"/g,'&quot;')}" onmousedown="qPickStudentFromFb(${tempId}, '${m.name.replace(/'/g,"\\'")}', '${(m.studentId||'').replace(/'/g,"\\'")}')">
-      <span class="q-dd-name">${m.name}</span>${sidLabel}
+    // 데이터 키는 rawName (Firebase 조회용)
+    return `<div class="q-dropdown-item ${i===0?'active':''}" data-idx="${i}" data-key="${m.rawName.replace(/"/g,'&quot;')}" onmousedown="qPickStudentFromFb(${tempId}, '${m.rawName.replace(/'/g,"\\'")}')">
+      <span class="q-dd-name">${m.name}</span>${subLabel}
       <span class="q-dd-info">${acctInfo}</span>
     </div>`;
   }).join('');
@@ -7451,17 +7466,26 @@ function qFindPastAccount(name, studentId){
 }
 
 // Firebase 학생 선택 시 — 이름·학번은 Firebase에서, 계좌는 환불 이력에서
-function qPickStudentFromFb(tempId, name, studentId){
-  // 캐시에서 학생 찾기
+function qPickStudentFromFb(tempId, rawName){
+  // 캐시에서 학생 찾기 (rawName으로)
   const cache = _firebaseStudentCache || [];
-  const st = cache.find(s => s.name === name && (s.studentId || '') === (studentId || ''));
+  const st = cache.find(s => s.rawName === rawName);
+  if(!st){
+    console.warn('[학생선택] 캐시에서 못 찾음:', rawName);
+    document.querySelectorAll('.q-dropdown').forEach(d => d.remove());
+    return;
+  }
   // 행 객체 업데이트
   const row = qState.rows.find(r => r.tempId === tempId);
   if(row){
-    row.name = name;
-    row.studentId = studentId || (st ? st.studentId : '') || '';
+    // 표시 이름은 순수 이름 (예: "강연웅")
+    row.name = st.name;
+    row.studentId = st.studentId || '';
+    row.grade = st.grade || '';
+    // 원본 키도 저장 (교재 미배부 조회 시 사용)
+    row.firebaseKey = st.rawName;
     // ⭐ 계좌는 환불 이력에서 가져옴 (교재엔 계좌 없음)
-    const pastAcct = qFindPastAccount(name, row.studentId);
+    const pastAcct = qFindPastAccount(st.name, st.studentId);
     if(pastAcct){
       row.holder = pastAcct.holder;
       row.bank = pastAcct.bank;
@@ -8259,14 +8283,44 @@ async function getFirebaseStudents(){
     }
     const names = Object.keys(data);
     console.log('[students] ✓ 학생', names.length, '명 발견:', names.slice(0, 10).join(', '), names.length > 10 ? '...' : '');
-    const list = names.map(name => {
-      const info = data[name] || {};
+    const list = names.map(rawName => {
+      const info = data[rawName] || {};
       const isObj = typeof info === 'object' && info !== null;
+
+      // ⭐ Firebase 실제 구조 파싱: "(5)강연웅2804" → 학년/이름/학번
+      // 형식: (학년)이름학번  예: (5)강연웅2804, (6)김규민1325
+      // 만약 객체로 저장되어 있으면 그 안의 값을 우선 사용
+      let displayName = rawName;  // 자동완성에 표시할 이름
+      let pureName = rawName;     // 검색용 순수 이름
+      let studentId = '';
+      let grade = '';
+
+      // 형식 1: (학년)이름학번
+      const m = rawName.match(/^\((\d+)\)(.+?)(\d+)$/);
+      if(m){
+        grade = m[1];
+        pureName = m[2];
+        studentId = m[3];
+      } else {
+        // 형식 2: 객체 안에 정보
+        if(isObj){
+          if(info.name) pureName = info.name;
+          if(info.studentId) studentId = info.studentId;
+          if(info.grade) grade = info.grade;
+        }
+      }
+
       return {
-        name,
-        studentId: isObj && info.studentId ? info.studentId : '',
-        initials: extractInitials(name),
-        lowerName: name.toLowerCase()
+        rawName,           // 원본 키 (Firebase 조회용)
+        name: pureName,    // 순수 이름 (검색·표시용)
+        displayName,       // 화면에 보여줄 풀네임 (학년·학번 포함)
+        studentId,
+        grade,
+        // 검색 인덱스: 순수 이름 + 풀네임 둘 다
+        initials: extractInitials(pureName),
+        initialsFull: extractInitials(rawName),
+        lowerName: pureName.toLowerCase(),
+        lowerFull: rawName.toLowerCase()
       };
     });
     _firebaseStudentCache = list;
