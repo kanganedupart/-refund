@@ -466,10 +466,14 @@ body.role-starter [data-need-role="chief"].is-on{cursor:default;pointer-events:n
 .quick-table .q-cell-refund input{font-weight:700;color:var(--text);text-align:right;font-variant-numeric:tabular-nums;font-size:13px}
 .quick-table .q-cell-refund.manual input{color:var(--text);font-style:italic}
 .quick-table .q-cell-refund.invalid input{color:var(--text-light)}
-/* 항목별 환불액 셀 (클릭 가능, 수동 표시) — 옅은 강조 배경 */
-.quick-table .q-cell-refund-item{min-width:95px;max-width:120px;position:relative;background:#f5f1ea}
+/* 항목별 환불액 셀 — 환불액 있으면 노란색 강조, 없으면 흰색 (사장님 룰 2026.05.18) */
+.quick-table .q-cell-refund-item{min-width:95px;max-width:120px;position:relative;background:white}
+.quick-table .q-cell-refund-item.has-value{background:#f5f1ea}
 .quick-table .q-cell-refund-item input{font-weight:600;text-align:right;font-variant-numeric:tabular-nums;cursor:text;color:var(--text)}
+.quick-table .q-cell-refund-item.has-value input{font-weight:700}
+.quick-table .q-cell-refund-item.empty input{color:#b4b2a9;font-weight:400}
 .quick-table .q-cell-refund-item input:hover{background:#ebe5d6;color:var(--text)}
+.quick-table .q-cell-refund-item.empty input:hover{background:#f5f1ea;color:var(--text)}
 .quick-table .q-cell-refund-item input:focus{background:white !important;outline:2px solid var(--primary);color:var(--text)}
 /* 날짜 입력 — 텍스트 스타일 */
 .quick-table .q-date-input{font-variant-numeric:tabular-nums;text-align:center;font-weight:600}
@@ -6342,26 +6346,117 @@ async function qFetchAllBookUnissued(){
   let skipped = 0;
   qState.rows.forEach(row => {
     if(!row.name || !row.name.trim()){ return; }
-    const info = dataObj[row.name.trim()];
+    // ⭐ 매칭: 풀네임(firebaseKey) 우선, 없으면 순수 이름
+    let info = null;
+    if(row.firebaseKey && dataObj[row.firebaseKey]){
+      info = dataObj[row.firebaseKey];
+    } else if(dataObj[row.name.trim()]){
+      info = dataObj[row.name.trim()];
+    } else {
+      // 마지막 시도: Firebase 키 중 순수 이름이 일치하는 것 찾기
+      const found = Object.keys(dataObj).find(k => {
+        const m = k.match(/^\((\d+)\)(.+?)(\d+)$/);
+        if(m) return m[2] === row.name.trim();
+        return k === row.name.trim();
+      });
+      if(found) info = dataObj[found];
+    }
     if(!info || !info.total){
       skipped++;
       return;
     }
     // 기준액 + 환불액 자동 입력
+    const books = Array.isArray(info.books) ? info.books : [];
     row.fees[bookItem.id] = info.total;
     if(!row.manualRefund) row.manualRefund = {};
     if(!row.manualReason) row.manualReason = {};
+    if(!row.bookData) row.bookData = {};
     row.manualRefund[bookItem.id] = info.total;
-    row.manualReason[bookItem.id] = '교재 미배부 자동 (' + (info.books?.length || 0) + '권)';
+    row.manualReason[bookItem.id] = '교재 미배부 자동 (' + books.length + '권)';
+    // ⭐ 책 목록 저장 (펼치기용)
+    row.bookData[bookItem.id] = {
+      total: info.total,
+      books: books,
+      expanded: false
+    };
     applied++;
   });
   qRenderTable();
   qUpdateTotalBox();
   if(applied === 0){
-    toast('자동 입력된 학생 없음 (등록된 학생만 적용)');
+    toast('자동 입력된 학생 없음 (이름 매칭 안 됨)');
   } else {
     toast('✓ ' + applied + '명 자동 입력' + (skipped > 0 ? ' / ' + skipped + '명 미배부 없음' : ''));
   }
+}
+
+// ⭐ 학생 1명 + 교재비 셀의 미배부 자동 가져오기 (개별 버튼)
+async function qFetchBookOne(tempId, itemId){
+  if(!qState) return;
+  const row = qState.rows.find(r => r.tempId === tempId);
+  if(!row || !row.name || !row.name.trim()){
+    toast('학생 이름을 먼저 입력하세요');
+    return;
+  }
+  if(typeof firebase === 'undefined' || !firebase.database){
+    toast('Firebase 초기화 안 됨');
+    return;
+  }
+  let dataObj;
+  try {
+    const snap = await firebase.database().ref('shared/bookUnissued').once('value');
+    dataObj = snap.val();
+  } catch(e){
+    console.error('Firebase 읽기 실패:', e);
+    toast('교재 데이터 읽기 실패');
+    return;
+  }
+  if(!dataObj){
+    toast('교재 프로그램에서 미배부 데이터를 먼저 설정해주세요');
+    return;
+  }
+  // 매칭: firebaseKey > 순수 이름 > 키 안 순수 이름 검색
+  let info = null;
+  if(row.firebaseKey && dataObj[row.firebaseKey]){
+    info = dataObj[row.firebaseKey];
+  } else if(dataObj[row.name.trim()]){
+    info = dataObj[row.name.trim()];
+  } else {
+    const found = Object.keys(dataObj).find(k => {
+      const m = k.match(/^\((\d+)\)(.+?)(\d+)$/);
+      if(m) return m[2] === row.name.trim();
+      return k === row.name.trim();
+    });
+    if(found) info = dataObj[found];
+  }
+  if(!info || !info.total){
+    toast(row.name + ' 학생 미배부 교재 없음');
+    return;
+  }
+  const books = Array.isArray(info.books) ? info.books : [];
+  row.fees[itemId] = info.total;
+  if(!row.manualRefund) row.manualRefund = {};
+  if(!row.manualReason) row.manualReason = {};
+  if(!row.bookData) row.bookData = {};
+  row.manualRefund[itemId] = info.total;
+  row.manualReason[itemId] = '교재 미배부 자동 (' + books.length + '권)';
+  row.bookData[itemId] = {
+    total: info.total,
+    books: books,
+    expanded: true  // 개별 가져오기는 자동으로 펼침
+  };
+  qRenderTable();
+  qUpdateTotalBox();
+  toast('✓ ' + row.name + ': ₩' + info.total.toLocaleString() + ' (' + books.length + '권)');
+}
+
+// ⭐ 교재 미배부 책 목록 펼치기/접기
+function qToggleBookExpand(tempId, itemId){
+  if(!qState) return;
+  const row = qState.rows.find(r => r.tempId === tempId);
+  if(!row || !row.bookData || !row.bookData[itemId]) return;
+  row.bookData[itemId].expanded = !row.bookData[itemId].expanded;
+  qRenderTable();
 }
 
 function qAddItem(type, subType){
@@ -6737,7 +6832,13 @@ function qRefreshRow(row){
         refundDisplay = '₩0';
       }
       const isNextMonth = !!(row.nextMonth && row.nextMonth[it.id]);
-      let cls = 'q-cell-refund-item' + (isManual ? ' manual' : '') + (isNextMonth ? ' next-month' : '') + (c.invalid && fee && !isNextMonth ? ' invalid' : '');
+      // ⭐ 환불액 있는 칸 = has-value (노란색 강조), 없는 칸 = empty (흰색)
+      const hasRefundValue = (c.refund > 0) || isNextMonth || (isManual && row.manualRefund[it.id] > 0);
+      let cls = 'q-cell-refund-item'
+        + (hasRefundValue ? ' has-value' : ' empty')
+        + (isManual ? ' manual' : '')
+        + (isNextMonth ? ' next-month' : '')
+        + (c.invalid && fee && !isNextMonth ? ' invalid' : '');
       refundCell.className = cls;
       const inp = refundCell.querySelector('input');
       if(inp) inp.value = refundDisplay;
@@ -7146,6 +7247,27 @@ function qRenderRow(row, idx, needsDate, supportsNewbie){
         </select>
       </label>`;
     }
+    // ⭐ 교재비 → 미배부 가져오기 버튼 + 책 목록 펼치기/접기
+    if(it.type === '교재비'){
+      const bookData = row.bookData && row.bookData[it.id];
+      if(bookData && bookData.books && bookData.books.length > 0){
+        // 책 데이터 있음 → 펼치기/접기 토글
+        const expandIcon = bookData.expanded ? '▼' : '▶';
+        cellInner += `<button class="q-book-toggle" type="button" onclick="event.stopPropagation(); qToggleBookExpand(${row.tempId},'${it.id}')" title="미배부 책 목록 ${bookData.expanded?'접기':'펼치기'}" style="margin-left:4px;padding:2px 6px;font-size:10px;border:1px solid #d4a574;background:#fff7ed;color:#92400e;border-radius:3px;cursor:pointer">📚 ${bookData.books.length}권 ${expandIcon}</button>`;
+        // 펼친 상태면 책 목록 표시
+        if(bookData.expanded){
+          const bookListHtml = bookData.books.map(b => {
+            const title = b.title || b.name || '제목 없음';
+            const price = b.price || b.amount || 0;
+            return `<div style="display:flex;justify-content:space-between;padding:2px 6px;font-size:11px;color:#555;border-bottom:1px dotted #eee"><span>${qEscape(title)}</span><span style="font-variant-numeric:tabular-nums">₩${price.toLocaleString()}</span></div>`;
+          }).join('');
+          cellInner += `<div class="q-book-list" style="margin-top:4px;padding:4px;background:#fffbf3;border:1px solid #fed7aa;border-radius:4px;max-height:120px;overflow-y:auto" onclick="event.stopPropagation()">${bookListHtml}</div>`;
+        }
+      } else {
+        // 책 데이터 없음 → 가져오기 버튼
+        cellInner += `<button class="q-book-fetch-one" type="button" onclick="event.stopPropagation(); qFetchBookOne(${row.tempId},'${it.id}')" title="이 학생의 미배부 교재 자동 가져오기" style="margin-left:4px;padding:2px 6px;font-size:10px;border:1px solid #d4a574;background:#fff7ed;color:#92400e;border-radius:3px;cursor:pointer">📚 가져오기</button>`;
+      }
+    }
     if(supportsNext){
       cellInner += `<label class="q-next-toggle" title="익월 전액 (다음 달 미수강분 100%)" onclick="event.stopPropagation()"><input type="checkbox" ${isNextMonth ? 'checked' : ''} onchange="qToggleNextMonth(${row.tempId},'${it.id}',this.checked)" /><span>익월</span></label>`;
     }
@@ -7439,13 +7561,6 @@ async function qOnNameInput(tempId, value){
   dd.className = 'q-dropdown';
   dd.dataset.row = tempId;
   dd.innerHTML = matches.slice(0, 8).map((m, i) => {
-    // 학년·학번 라벨 (있으면)
-    const labelParts = [];
-    if(m.grade) labelParts.push(m.grade + '학년');
-    if(m.studentId) labelParts.push(m.studentId);
-    const subLabel = labelParts.length > 0
-      ? `<span style="color:#888;margin-left:6px;font-size:11px">${labelParts.join(' · ')}</span>`
-      : '';
     // ⭐ 과거 환불 이력에서 계좌 정보 가져오기 (드롭다운 미리보기용)
     const pastAcct = qFindPastAccount(m.name, m.studentId);
     const acctInfo = pastAcct
@@ -7453,7 +7568,7 @@ async function qOnNameInput(tempId, value){
       : '<span style="color:#aaa">과거 환불 이력 없음 — 계좌 직접 입력</span>';
     // 데이터 키는 rawName (Firebase 조회용)
     return `<div class="q-dropdown-item ${i===0?'active':''}" data-idx="${i}" data-key="${m.rawName.replace(/"/g,'&quot;')}" onmousedown="qPickStudentFromFb(${tempId}, '${m.rawName.replace(/'/g,"\\'")}')">
-      <span class="q-dd-name">${m.name}</span>${subLabel}
+      <span class="q-dd-name">${m.name}</span>
       <span class="q-dd-info">${acctInfo}</span>
     </div>`;
   }).join('');
@@ -7502,7 +7617,7 @@ function qFindPastAccount(name, studentId){
   };
 }
 
-// Firebase 학생 선택 시 — 이름·학번은 Firebase에서, 계좌는 환불 이력에서
+// Firebase 학생 선택 시 — 이름·학번은 Firebase에서, 계좌는 환불 이력에서, 교재 미배부는 자동
 function qPickStudentFromFb(tempId, rawName){
   // 캐시에서 학생 찾기 (rawName으로)
   const cache = _firebaseStudentCache || [];
@@ -7515,7 +7630,7 @@ function qPickStudentFromFb(tempId, rawName){
   // 행 객체 업데이트
   const row = qState.rows.find(r => r.tempId === tempId);
   if(row){
-    // 표시 이름은 순수 이름 (예: "강연웅")
+    // ⭐ 풀네임 그대로 사용 (예: "(5)강연웅2804")
     row.name = st.name;
     row.studentId = st.studentId || '';
     row.grade = st.grade || '';
@@ -7534,6 +7649,13 @@ function qPickStudentFromFb(tempId, rawName){
   // 드롭다운 닫기 + 표 다시 그리기 (계좌 정보 반영)
   document.querySelectorAll('.q-dropdown').forEach(d => d.remove());
   qRenderTable();
+
+  // ⭐ 교재비 항목이 있으면 그 학생의 미배부 자동 가져오기
+  const bookItem = qState.items.find(it => it.type === '교재비');
+  if(bookItem && row){
+    qFetchBookOne(tempId, bookItem.id);
+  }
+
   // 다음 셀로 포커스 (납부일)
   setTimeout(() => {
     const next = document.querySelector(`#qTbody tr[data-row="${tempId}"] input[data-field="payDate"]`);
@@ -8324,39 +8446,30 @@ async function getFirebaseStudents(){
       const info = data[rawName] || {};
       const isObj = typeof info === 'object' && info !== null;
 
-      // ⭐ Firebase 실제 구조 파싱: "(5)강연웅2804" → 학년/이름/학번
-      // 형식: (학년)이름학번  예: (5)강연웅2804, (6)김규민1325
-      // 만약 객체로 저장되어 있으면 그 안의 값을 우선 사용
-      let displayName = rawName;  // 자동완성에 표시할 이름
-      let pureName = rawName;     // 검색용 순수 이름
+      // ⭐ Firebase 원본 키를 그대로 표시 (사장님 룰 2026.05.18)
+      // 예: "(5)강연웅2804" → 표시도 "(5)강연웅2804" 그대로
+      // 단 학번은 따로 빼서 동명이인 구분·검색용으로 보관
+      let displayName = rawName;
       let studentId = '';
-      let grade = '';
 
-      // 형식 1: (학년)이름학번
-      const m = rawName.match(/^\((\d+)\)(.+?)(\d+)$/);
+      // 끝의 숫자만 학번으로 추출 (예: (5)강연웅2804 → 학번 "2804")
+      const m = rawName.match(/(\d+)$/);
       if(m){
-        grade = m[1];
-        pureName = m[2];
-        studentId = m[3];
-      } else {
-        // 형식 2: 객체 안에 정보
-        if(isObj){
-          if(info.name) pureName = info.name;
-          if(info.studentId) studentId = info.studentId;
-          if(info.grade) grade = info.grade;
-        }
+        studentId = m[1];
+      } else if(isObj && info.studentId){
+        studentId = info.studentId;
       }
 
       return {
         rawName,           // 원본 키 (Firebase 조회용)
-        name: pureName,    // 순수 이름 (검색·표시용)
-        displayName,       // 화면에 보여줄 풀네임 (학년·학번 포함)
+        name: rawName,     // ⭐ 표시·저장용도 풀네임 그대로
+        displayName: rawName,
         studentId,
-        grade,
-        // 검색 인덱스: 순수 이름 + 풀네임 둘 다
-        initials: extractInitials(pureName),
+        grade: '',         // 학년 안 씀
+        // 검색 인덱스: 풀네임 그대로
+        initials: extractInitials(rawName),
         initialsFull: extractInitials(rawName),
-        lowerName: pureName.toLowerCase(),
+        lowerName: rawName.toLowerCase(),
         lowerFull: rawName.toLowerCase()
       };
     });
