@@ -233,6 +233,9 @@ body.role-starter:not(.role-admin) .role-chief-only-show{display:none}
 /* 수동 수정 행 */
 .tbl tr.manual-row td{background:#fff7ed99}
 .tbl tr.manual-row.done td{background:#fff7ed44}
+.tbl tr.row-hold td{background:#f9fafb}
+.tbl tr.row-hold td.type-cell, .tbl tr.row-hold td:nth-child(2){color:#6b7280}
+.badge.b-hold{display:inline-block;font-weight:600}
 .tbl-amt-manual{color:var(--text)}
 
 /* 컬럼 헤더 필터 ▾ */
@@ -496,7 +499,7 @@ body.role-starter [data-need-role="chief"].is-on{cursor:default;pointer-events:n
 .q-badge-new{background:#fee2e2;color:#991b1b}
 .q-row-new .q-cell-account input{background:#fef2f2;color:#991b1b}
 .q-row-new .q-cell-account input::placeholder{color:#dc2626}
-.q-dropdown{position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;max-height:200px;overflow-y:auto}
+.q-dropdown{position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:300;max-height:200px;overflow-y:auto}
 /* 단축키 안내 박스 */
 .q-help-box{display:none;background:#fef3c7;border-bottom:1px solid #fde68a;padding:10px 18px}
 .q-help-box.show{display:block}
@@ -861,6 +864,7 @@ console.log('[Firebase] 초기화 완료 — Realtime DB URL:', firebase.databas
       <span class="filter-divider"></span>
       <button class="chip-grp chip-bounce" data-grp="bounced" onclick="setGroupFilter('bounced')">🔁 반송</button>
       <button class="chip-grp chip-fixed" data-grp="fixed" onclick="setGroupFilter('fixed')">⏳ 대기</button>
+      <button class="chip-grp chip-hold" data-grp="hold" onclick="setGroupFilter('hold')" title="날짜 미입력 = 보류 상태">⏸ 보류</button>
       <span class="filter-divider"></span>
       <button class="chip-grp" data-grp="rechargePending" onclick="setGroupFilter('rechargePending')">💳 재결제 대기</button>
       <button class="chip-grp" data-grp="rechargeDone" onclick="setGroupFilter('rechargeDone')">💳 오늘 재결제</button>
@@ -1147,8 +1151,8 @@ console.log('[Firebase] 초기화 완료 — Realtime DB URL:', firebase.databas
 
         <div class="setting-row">
           <div class="setting-row-label">
-            <div class="setting-row-name">급식비 차감 일수</div>
-            <div class="setting-row-desc">퇴반 요청일 포함 며칠을 차감 후 환불 (매뉴얼: 3일)</div>
+            <div class="setting-row-name">급식비 보정 차감 영업일</div>
+            <div class="setting-row-desc">퇴반일 포함 영업일 며칠치 식수를 차감 (일요일·완전휴원일은 건너뜀, 매뉴얼: 3일)</div>
           </div>
           <div class="setting-row-value">
             <span id="curMealCutDays" class="rule-current">-</span>
@@ -1194,11 +1198,13 @@ console.log('[Firebase] 초기화 완료 — Realtime DB URL:', firebase.databas
       <div class="card-body">
         <p class="muted tiny" style="margin-bottom:8px">모의고사·휴원·공휴일 등 등록 시 영향을 체크하세요.</p>
         <div style="padding:8px 10px;background:#fafaf8;border:1px solid #e5e7eb;border-radius:6px;margin-bottom:12px">
-          <div style="font-size:11px;color:var(--text);font-weight:600;margin-bottom:4px">영향 체크 안내</div>
+          <div style="font-size:11px;color:var(--text);font-weight:600;margin-bottom:4px">체크박스 안내 — 체크 = "제공 안 됨/없음"</div>
           <div style="font-size:11px;color:var(--text-muted);line-height:1.6">
-            • <b>수업</b>: 체크 시 수강료 일수 계산에서 제외<br>
-            • <b>중식·석식</b>: 체크 시 해당 식사 환불 일수에서 제외<br>
-            • 일요일은 자동 제외 (입력 불필요), 학사비에는 적용 안 됨
+            • <b>수업 없음</b>: 그날 수업 X (모의고사, 휴원 등) → 수강료 일수에서 제외<br>
+            • <b>중식 없음</b>: 그날 중식 제공 X → 급식비에서 중식 차감 제외<br>
+            • <b>석식 없음</b>: 그날 석식 제공 X → 급식비에서 석식 차감 제외<br>
+            • 여러 개 체크 가능 (예: 모의고사+석식없음 = 수업·석식 둘 다 체크)<br>
+            • 일요일은 자동 제외 (입력 불필요), 학사비에는 영향 없음
           </div>
         </div>
         <div id="nonClassList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px"></div>
@@ -1207,21 +1213,30 @@ console.log('[Firebase] 초기화 완료 — Realtime DB URL:', firebase.databas
             <input type="date" id="setNonClassDate" />
             <input type="text" id="setNonClassReason" placeholder="사유 (예: 모의고사)" style="flex:1" />
           </div>
-          <div style="display:flex;gap:14px;align-items:center;font-size:12px">
-            <span class="muted tiny" style="flex-shrink:0">영향:</span>
-            <label class="radio-mini" style="cursor:pointer">
-              <input type="checkbox" id="setAffectClass" checked />
-              <span>수업</span>
+          <div style="display:flex;flex-direction:column;gap:8px;font-size:12px">
+            <span class="muted tiny" style="font-size:11px">제공 안 되는 것 체크 (여러 개 가능):</span>
+            <label class="radio-mini" style="cursor:pointer;display:flex;align-items:flex-start;gap:8px">
+              <input type="checkbox" id="setAffectClass" style="margin-top:2px" />
+              <div>
+                <div style="font-weight:600">수업 없음</div>
+                <div style="font-size:11px;color:var(--text-muted)">모의고사일·휴원일 → 수강료 일수에서 제외</div>
+              </div>
             </label>
-            <label class="radio-mini" style="cursor:pointer">
-              <input type="checkbox" id="setAffectLunch" />
-              <span>중식</span>
+            <label class="radio-mini" style="cursor:pointer;display:flex;align-items:flex-start;gap:8px">
+              <input type="checkbox" id="setAffectLunch" style="margin-top:2px" />
+              <div>
+                <div style="font-weight:600">중식 없음</div>
+                <div style="font-size:11px;color:var(--text-muted)">그날 중식 제공 X → 급식비에서 중식 차감 제외</div>
+              </div>
             </label>
-            <label class="radio-mini" style="cursor:pointer">
-              <input type="checkbox" id="setAffectDinner" />
-              <span>석식</span>
+            <label class="radio-mini" style="cursor:pointer;display:flex;align-items:flex-start;gap:8px">
+              <input type="checkbox" id="setAffectDinner" style="margin-top:2px" />
+              <div>
+                <div style="font-weight:600">석식 없음</div>
+                <div style="font-size:11px;color:var(--text-muted)">그날 석식 제공 X → 급식비에서 석식 차감 제외</div>
+              </div>
             </label>
-            <button class="btn btn-sm btn-primary" onclick="addNonClassDay()" style="margin-left:auto">＋ 추가</button>
+            <button class="btn btn-sm btn-primary" onclick="addNonClassDay()" style="align-self:flex-end;margin-top:4px">＋ 추가</button>
           </div>
         </div>
       </div>
@@ -1578,6 +1593,15 @@ console.log('[Firebase] 초기화 완료 — Realtime DB URL:', firebase.databas
         </div>
       </div>
 
+      <!-- 🔍 진단 패널 (사장님 디버깅용 - 환불액 ₩0 원인 추적) -->
+      <div style="margin-top:8px;background:#fff7ed;border:1px solid #fed7aa;border-radius:6px">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-bottom:1px solid #fed7aa">
+          <span style="font-size:12px;font-weight:600;color:#9a3412">🔍 진단 — 모든 행 상태 (환불액 이상하면 새로고침 클릭)</span>
+          <button class="btn btn-sm" type="button" onclick="qShowDiagnostics()">🔄 새로고침</button>
+        </div>
+        <div id="qDiagPanel" style="padding:10px 14px;font-size:11px;font-family:monospace;background:white;max-height:300px;overflow-y:auto;white-space:pre-wrap;line-height:1.6">새로고침 버튼을 누르세요</div>
+      </div>
+
     </div>
     <div class="modal-footer" style="display:flex;justify-content:flex-end;align-items:center;gap:8px;padding:12px 22px;border-top:1px solid var(--border)">
       <button class="btn" onclick="closeQuickModal()">취소</button>
@@ -1781,7 +1805,7 @@ let settings = {
   ],
   // 환불 룰 (학원 공통, 변경 시 안전장치)
   newbieDayLimit: 3,              // 신규생 일수환불 기준일 (매뉴얼: 3일)
-  mealCutDays: 3,                 // 급식비 차감 일수 (매뉴얼: 3일)
+  mealCutDays: 3,                 // 급식비 보정 차감 영업일 수 (퇴반일 포함 N영업일)
   // 룰 변경 이력 (자동 기록)
   ruleChangeLog: [],
   // 비수업일 달력 — 영향 범위 체크 가능
@@ -2048,6 +2072,13 @@ function load(){
   // 사용자가 직접 다른 값으로 변경했으면 그대로 유지
   if(settings.mealDailyFee === 15800){
     settings.mealDailyFee = 7900;
+  }
+  // cutDays 마이그레이션 (사장님 룰 2026.05.17 확정):
+  // 새 룰 = 퇴반일 포함 영업일 3일 차감 → 기본값 3
+  // 사장님이 직접 다른 값으로 변경했으면 그대로 유지
+  // 이전에 2로 바뀐 적이 있는 환경은 3으로 복원
+  if(settings.mealCutDays === 2){
+    settings.mealCutDays = 3;
   }
   // 자동 모드 폐지: 항상 false
   settings.mealAutoCalc = false;
@@ -2518,52 +2549,103 @@ function calcRefund(item){
     else { meals = 1; mealLabel = '중식'; }
 
     const cutDays = settings.mealCutDays || 3;
-    // ⭐ 사장님 룰 (2026.05.14 변경):
-    // 환불액 = 납부액 - 차감액
-    // 차감 기간 = 납부일 ~ 퇴반일+(cutDays-1) (퇴반일 포함 cutDays일치)
-    // 예) 5/1 납부, 5/5 퇴반, cutDays=3 → 차감 5/1~5/7
-    // 일요일·비수업일 제외
-    const cutEnd = new Date(leave);
-    cutEnd.setDate(cutEnd.getDate() + cutDays - 1);
+    // ⭐ 사장님 룰 (2026.05.16 갱신):
+    // 환불액 = 납부액 - (다닌 식수 차감 + 보정 식수 차감)
+    //
+    // [다닌 식수 차감] 납부일 ~ 퇴반일 영업일 (일요일·휴강일 제외)
+    //   - 비수업일이라도 식사 일부 제공되는 날은 영업일 카운트, 제공 식사만 차감
+    //   - 휴강(affectClass=true)은 건너뜀
+    //
+    // [보정 식수 차감] 퇴반일 다음날부터 영업일 N개 (기본 2일)
+    //   - 일요일은 건너뜀
+    //   - ⭐ 급식 관점: "영업일 = 어떤 식사라도 제공되는 날"
+    //     → 모의고사일(수업X but 식사 정상) = 영업일 ✓ (그날 제공되는 식사만 차감)
+    //     → 완전 휴원일(수업X·중식X·석식X) = 영업일 X (건너뜀, 다음 날로 밀림)
+    //   - 예) 5/15 퇴반, 5/16 정상(2식) + 5/17 일요일 + 5/18 모의고사(중식만 제공) = 2영업일 → 보정 3식
+    //   - 예) 5/15 퇴반, 5/16 정상(2식) + 5/17 일요일 + 5/18 완전휴원 → 5/19로 밀려 보정 4식
 
-    // 차감 영업일 (납부일 ~ 퇴반일+2, 일요일 제외)
-    const cutTotalDays = nWorkDays(toIso(pay), toIso(cutEnd), true);
-
-    // 식사별 비운영일 집계 (납부일 ~ 차감 끝일 범위)
-    let lunchOffInCut = 0;
-    let dinnerOffInCut = 0;
     const list = settings.nonClassDayList || [];
-    list.forEach(d => {
-      if(d.date >= toIso(pay) && d.date <= toIso(cutEnd)){
-        const dow = new Date(d.date + 'T00:00:00').getDay();
-        if(dow === 0) return;  // 일요일은 어차피 카운트 안 됨
-        if(d.affectLunch) lunchOffInCut++;
-        if(d.affectDinner) dinnerOffInCut++;
-      }
-    });
+    const ncMap = {};  // 날짜별 비수업일 정보
+    list.forEach(d => { ncMap[d.date] = d; });
 
-    // 식사별 차감 일수 (비수업일 빼고)
-    const lunchCutDays = Math.max(0, cutTotalDays - lunchOffInCut);
-    const dinnerCutDays = Math.max(0, cutTotalDays - dinnerOffInCut);
+    // 그날 학생에게 차감될 식수 계산
+    // - 일요일이면 skip
+    // - 그날 학생 신청 식사가 0식이면 skip (완전 휴원 또는 학생 신청 식사 전부 휴무)
+    // - 그 외에는 영업일로 카운트, 제공되는 식사만 차감
+    function mealsOnDay(iso){
+      const dow = new Date(iso + 'T00:00:00').getDay();
+      if(dow === 0) return { skip: true, lunch: 0, dinner: 0 };  // 일요일 건너뜀
+      const nc = ncMap[iso];
+
+      let lunch = (subType === '석식') ? 0 : 1;
+      let dinner = (subType === '중식') ? 0 : 1;
+      // 비수업일에 그 식사 제공 안 되면 0
+      // (affectLunch=true = "중식 제공 안 됨", affectDinner=true = "석식 제공 안 됨")
+      if(nc){
+        if(nc.affectLunch) lunch = 0;
+        if(nc.affectDinner) dinner = 0;
+      }
+      // ⭐ 학생이 받을 식사가 0식이면 영업일 아님 (완전 휴원 또는 신청 식사가 모두 휴무)
+      if(lunch + dinner === 0){
+        return { skip: true, lunch: 0, dinner: 0 };
+      }
+      return { skip: false, lunch, dinner };
+    }
+
+    // [다닌 식수] 납부일 ~ 퇴반일 전날 (퇴반일은 보정에 포함되므로 중복 방지)
+    let attendedLunch = 0;
+    let attendedDinner = 0;
+    const payIso = toIso(pay);
+    const leaveIso = toIso(leave);
+    const cursor = new Date(pay);
+    while(toIso(cursor) < leaveIso){  // ⭐ 퇴반일 전날까지만 (< 변경, 기존 <=)
+      const m = mealsOnDay(toIso(cursor));
+      if(!m.skip){ attendedLunch += m.lunch; attendedDinner += m.dinner; }
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    // [보정 식수] ⭐ 퇴반일 포함 영업일 cutDays개 (기본 3일)
+    //   - 퇴반일이 영업일(1식이라도 제공) → 퇴반일부터 카운트 시작
+    //   - 퇴반일이 일요일/완전휴원 → 그날 빼고 다음 영업일부터 카운트
+    //   - 사장님 룰: "퇴반일 포함해서 영업일 총 N일 차감" (N=cutDays, 기본 3일)
+    let bonusLunch = 0;
+    let bonusDinner = 0;
+    let bonusWorkDays = 0;  // 채운 영업일 개수
+    const bonusCursor = new Date(leave);  // ⭐ 퇴반일부터 시작 (기존: 퇴반일+1일)
+    let safety = 0;  // 무한 루프 방지 (최대 30일 탐색)
+    while(bonusWorkDays < cutDays && safety < 30){
+      const m = mealsOnDay(toIso(bonusCursor));
+      if(!m.skip){
+        bonusLunch += m.lunch;
+        bonusDinner += m.dinner;
+        bonusWorkDays++;
+      }
+      bonusCursor.setDate(bonusCursor.getDate() + 1);
+      safety++;
+    }
 
     // 1식 단가
     const daily = settings.mealDailyFee || 7900;
 
-    // 차감액 (다닌 식수 × 단가)
-    let usedAmount, detail;
+    // 총 차감 식수
+    const totalLunch = attendedLunch + bonusLunch;
+    const totalDinner = attendedDinner + bonusDinner;
+    const totalMeals = totalLunch + totalDinner;
+    const usedAmount = Math.floor(daily * totalMeals);
+
+    // 상세 설명
+    let detail;
     if(subType === '중식+석식'){
-      const usedMeals = lunchCutDays + dinnerCutDays;
-      usedAmount = Math.floor(daily * usedMeals);
-      detail = '차감 ' + cutTotalDays + '일치 (납부일 ~ 퇴반일+' + (cutDays-1) + ') × 2식 = ' + usedMeals + '식 × ' + daily.toLocaleString() + '원 = ' + usedAmount.toLocaleString() + '원';
+      detail = '다닌 ' + (attendedLunch+attendedDinner) + '식 + 보정 ' + (bonusLunch+bonusDinner) + '식 (퇴반일 포함 ' + cutDays + '영업일) = ' + totalMeals + '식 × ' + daily.toLocaleString();
     } else {
-      const useDays = (subType === '석식') ? dinnerCutDays : lunchCutDays;
-      usedAmount = Math.floor(daily * useDays);
-      detail = '차감 ' + useDays + '일치 (' + mealLabel + ') × ' + daily.toLocaleString() + '원 = ' + usedAmount.toLocaleString() + '원';
+      const att = (subType === '석식') ? attendedDinner : attendedLunch;
+      const bon = (subType === '석식') ? bonusDinner : bonusLunch;
+      detail = '다닌 ' + att + '식 + 보정 ' + bon + '식 (퇴반일 포함 ' + cutDays + '영업일) = ' + totalMeals + '식 × ' + daily.toLocaleString();
     }
 
-    // ⭐ 환불액 = 납부액 - 차감액
+    // 환불액 = 납부액 - 차감액
     let refund = fee - usedAmount;
-    if(refund < 0) refund = 0;  // 차감액이 납부액보다 크면 환불 없음 (다 먹음)
+    if(refund < 0) refund = 0;
 
     return {
       refund,
@@ -2612,6 +2694,22 @@ function calcRefund(item){
 
 function toIso(d){
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
+// ⭐ 보류 행 판정 (사장님 룰 2026.05.18 확정)
+// - 진행된 행(done/checked/approved)은 보류 X
+// - 학사보증금/패드비(보증금·대여료)/교재비는 정액 또는 자동 산정이라 보류 X
+// - 위에 해당 안 되고 납부일 또는 퇴반일 빈 값이면 보류
+function isHoldRefund(r){
+  if(!r) return false;
+  if(r.done) return false;
+  if(r.checked) return false;
+  if(r.approved) return false;
+  if(r.type === '학사비' && r.subType === '학사보증금') return false;
+  if(r.type === '패드비' && (r.subType === '보증금' || r.subType === '대여료')) return false;
+  if(r.type === '교재비') return false;
+  if(!r.payDate || !r.leaveDate) return true;
+  return false;
 }
 
 // ============================================================
@@ -2664,7 +2762,7 @@ function setMultiFilter(k, v){
 // (2) 사업자 칩: 수강료 / 급식비 / 학사교재패드 / all (단일선택, 단계와 독립적)
 // 두 그룹은 동시에 활성 가능 — 교집합으로 필터링
 // ─────────────────────────────────────────────
-const STAGE_CHIPS = ['all','pendingMo','transferReady','todayChecked','todayDone','rechargePending','rechargeDone','bounced','fixed'];
+const STAGE_CHIPS = ['all','pendingMo','transferReady','todayChecked','todayDone','rechargePending','rechargeDone','bounced','fixed','hold'];
 const BIZ_CHIPS = ['all','수강료','급식비','학사교재패드'];
 
 function setGroupFilter(grp){
@@ -3025,6 +3123,9 @@ function passesStageFilterStrict(r){
     // ⏳ 대기 = 미승인 + 미완료
     if(r.done) return false;
     if(r.approved) return false;
+  } else if(stageFilter === 'hold'){
+    // ⏸ 보류 = 날짜 미입력 (단, 정액·교재비 항목은 제외 — isHoldRefund 함수 기준)
+    if(!isHoldRefund(r)) return false;
   }
   return true;
 }
@@ -3287,8 +3388,11 @@ function render(){
     const typeLabel = getDisplayType(r.type, r.subType);
     const reasonLabel = r.reason ? `<span class="reason-label">${r.reason}</span>` : '';
     const isManual = r.manualRefund != null;
-    const ruleText = isManual ? '⚠️ 수동' : (c ? c.rule : '-');
-    const noteCell = isManual ? `<span class="badge b-special" title="${r.manualReason||''}">⚠️ 특이</span>` : '';
+    const isHold_ = isHoldRefund(r);
+    const ruleText = isManual ? '⚠️ 수동' : (isHold_ ? '⏸ 보류' : (c ? c.rule : '-'));
+    const noteCell = isManual 
+      ? `<span class="badge b-special" title="${r.manualReason||''}">⚠️ 특이</span>`
+      : (isHold_ ? `<span class="badge b-hold" title="날짜 미입력 — 보류 상태" style="background:#f3f4f6;color:#6b7280;border:1px solid #d1d5db;font-size:10px;padding:1px 6px">⏸ 보류</span>` : '');
     const memoCell = r.memo ? `<span class="memo-cell" title="${r.memo}">${r.memo}</span>` : '';
     // 재결제 배지 (스타터에게 보임 — 총무는 무관)
     let rechargeBadge = '';
@@ -3350,6 +3454,7 @@ function render(){
     const rowClasses = [
       r.done ? 'done done-row' : '',
       isManual ? 'manual-row' : '',
+      isHold_ ? 'row-hold' : '',
       isFirstOfGroup ? 'grp-start' : '',
       isLastOfGroup ? 'grp-end' : '',
       r.checked && !r.done ? 'row-checked' : ''
@@ -6088,9 +6193,18 @@ function openQuickRefundModal(){
   }, 150);
 }
 
-function closeQuickModal(){
-  if(qState && (qState.rows.length > 0 || qState.items.length > 0)){
-    if(!confirm('입력한 내용이 사라집니다. 정말 닫을까요?')) return;
+function closeQuickModal(force){
+  // force=true면 confirm 건너뜀 (저장 성공 후 자동 닫기에 사용)
+  if(!force && qState && (qState.rows.length > 0 || qState.items.length > 0)){
+    // 의미 있는 입력이 있는지 검사 (이름이나 fee가 채워진 행이 있을 때만 확인 띄움)
+    const hasMeaningfulInput = qState.rows.some(r => {
+      if(r.name && r.name.trim()) return true;
+      if(r.fees && Object.values(r.fees).some(v => v != null && v > 0)) return true;
+      return false;
+    });
+    if(hasMeaningfulInput){
+      if(!confirm('입력한 내용이 사라집니다. 정말 닫을까요?')) return;
+    }
   }
   document.getElementById('quickModal').classList.remove('active');
   // 드래그 위치 리셋
@@ -6565,7 +6679,15 @@ function qRefreshRow(row){
     // 환불액 셀
     const refundCell = tr.querySelector(`.q-cell-refund-item[data-item="${it.id}"]`);
     if(refundCell){
-      const refundDisplay = c.refund > 0 ? '₩' + c.refund.toLocaleString() : (fee ? '₩0' : '—');
+      // 빈 행 명확히 구분: fee 없으면 무조건 "—" 표시
+      let refundDisplay;
+      if(!fee || fee <= 0){
+        refundDisplay = '—';
+      } else if(c.refund > 0){
+        refundDisplay = '₩' + c.refund.toLocaleString();
+      } else {
+        refundDisplay = '₩0';
+      }
       const isNextMonth = !!(row.nextMonth && row.nextMonth[it.id]);
       let cls = 'q-cell-refund-item' + (isManual ? ' manual' : '') + (isNextMonth ? ' next-month' : '') + (c.invalid && fee && !isNextMonth ? ' invalid' : '');
       refundCell.className = cls;
@@ -6722,16 +6844,17 @@ function qSmartDateBlur(tempId, field, rawInput){
 
 // ⭐ 환불액 셀 직접 편집 (prompt 제거)
 // onfocus: 통화 표시 → 숫자만 (편집 쉽게)
+// ⚠️ 단, 자동 계산값을 hover 만으로 지워지지 않게 — 사용자가 실제 클릭한 경우에만 비움
 function qOnRefundFocus(input, tempId, itemId){
   const row = qState.rows.find(r => r.tempId === tempId);
   if(!row) return;
-  // 수동값 있으면 그 값, 없으면 빈 칸 (자동값 표시 안 함 → 입력 쉽게)
+  // 수동값 있으면 그 값을 편집 모드로 표시 (자동값은 그대로 둠 → 사장님이 직접 클릭 후 타이핑하면 수동 모드로 전환)
   if(row.manualRefund && row.manualRefund[itemId] != null){
     input.value = row.manualRefund[itemId];
-  } else {
-    input.value = '';
+    input.select();
   }
-  input.select();
+  // 자동 계산값일 때는 input.value 안 건드림 (₩123,456 그대로 보임)
+  // 사장님이 키 입력 시작하면 자연스럽게 덮어쓰기됨
 }
 
 // onblur: 입력 처리 + 통화 포맷 복귀
@@ -6756,6 +6879,48 @@ function qOnRefundBlur(input, tempId, itemId){
   qRefreshRow(row);
   qRefreshRowRefundCell(row);
   qUpdateTotalBox();
+}
+
+// 🔍 진단 함수 — 모든 행의 상태를 한눈에 보기 (₩0 원인 추적용)
+function qShowDiagnostics(){
+  const panel = document.getElementById('qDiagPanel');
+  if(!panel || !qState) return;
+  if(qState.rows.length === 0){
+    panel.textContent = '행이 없습니다.';
+    return;
+  }
+  if(qState.items.length === 0){
+    panel.textContent = '항목 컬럼이 없습니다. 상단에서 항목을 선택하세요.';
+    return;
+  }
+  let html = '';
+  html += '⚙️ 전역 설정\n';
+  html += '  • 단가(수강료): ' + (settings.dayFeeTuition?.[2026] || 97000).toLocaleString() + '원\n';
+  html += '  • 신규생 기준일: ' + (settings.newbieDayLimit || 3) + '일\n';
+  html += '  • 공통 신규생: ' + (qState.commonNewbie ? '✓' : '✗') + '\n';
+  html += '  • 공통 사유: ' + (qState.reason || '없음') + '\n';
+  html += '\n📋 항목 컬럼: ' + qState.items.map(it => it.type + (it.subType ? '·' + it.subType : '')).join(', ') + '\n';
+  html += '\n';
+  qState.rows.forEach((row, idx) => {
+    html += '────────────────────────\n';
+    html += '🧑 행 ' + (idx + 1) + '\n';
+    html += '  • 이름: ' + (row.name || '(빈 값)') + '\n';
+    html += '  • 납부일: ' + (row.payDate || '(빈 값)') + '\n';
+    html += '  • 퇴반일: ' + (row.leaveDate || '(빈 값)') + '\n';
+    html += '  • 신규생: ' + (row.isNewbie ? '✓ 체크됨' : '✗ 체크 안 됨') + '\n';
+    qState.items.forEach(it => {
+      const fee = row.fees[it.id];
+      const calc = qCalcRefundForRow(row, it);
+      const itName = it.type + (it.subType ? '·' + it.subType : '');
+      html += '  📦 ' + itName + '\n';
+      html += '     - fee 입력값: ' + (fee != null ? fee.toLocaleString() : '⚠️ null (입력 안 됨)') + '\n';
+      html += '     - 환불 계산: ' + (calc.refund > 0 ? '₩' + calc.refund.toLocaleString() : '₩0') + '\n';
+      html += '     - 룰: ' + (calc.rule || '없음') + '\n';
+      if(calc.invalid) html += '     - ⚠️ 계산 실패\n';
+    });
+    html += '\n';
+  });
+  panel.textContent = html;
 }
 
 function qRenderTable(){
@@ -6861,7 +7026,7 @@ function qRenderRow(row, idx, needsDate, supportsNewbie){
         <option value="무통장" ${curMethod==='무통장'?'selected':''}>무통장</option>
         <option value="카드" ${curMethod==='카드'?'selected':''}>카드</option>
       </select></td>`;
-      html += `<td class="q-cell-money"><input type="number" class="q-fee-input" data-row="${row.tempId}" data-item="${it.id}" data-field="fee-${it.id}" value="${fee != null ? fee : ''}" placeholder="0" oninput="qUpdateFee(${row.tempId},'${it.id}',this.value)" /></td>`;
+      html += `<td class="q-cell-money"><input type="number" class="q-fee-input" data-row="${row.tempId}" data-item="${it.id}" data-field="fee-${it.id}" value="${fee != null ? fee : ''}" placeholder="0" oninput="qUpdateFee(${row.tempId},'${it.id}',this.value)" onchange="qUpdateFee(${row.tempId},'${it.id}',this.value)" onblur="qUpdateFee(${row.tempId},'${it.id}',this.value)" /></td>`;
       // ⭐ 특강·논술 = 강좌명/방식/전체회/들은회 입력 셀 추가
       if(it.isSpecial){
         const className = (row.className && row.className[it.id]) || '';
@@ -6880,14 +7045,22 @@ function qRenderRow(row, idx, needsDate, supportsNewbie){
         html += `<td class="q-cell-sess"><input type="number" class="q-sess-input" data-row="${row.tempId}" data-item="${it.id}" data-field="attendedSessions-${it.id}" value="${attSess || ''}" placeholder="─" oninput="qUpdateSessions(${row.tempId},'${it.id}','attended',this.value)" /></td>`;
       }
     } else {
-      html += `<td class="q-cell-money"><input type="number" class="q-fee-input" data-row="${row.tempId}" data-item="${it.id}" data-field="fee-${it.id}" value="${fee != null ? fee : ''}" placeholder="0" oninput="qUpdateFee(${row.tempId},'${it.id}',this.value)" /></td>`;
+      html += `<td class="q-cell-money"><input type="number" class="q-fee-input" data-row="${row.tempId}" data-item="${it.id}" data-field="fee-${it.id}" value="${fee != null ? fee : ''}" placeholder="0" oninput="qUpdateFee(${row.tempId},'${it.id}',this.value)" onchange="qUpdateFee(${row.tempId},'${it.id}',this.value)" onblur="qUpdateFee(${row.tempId},'${it.id}',this.value)" /></td>`;
     }
     // 항목별 환불액 셀 (클릭하면 수동 변경) + 익월 토글 (수강료/학사비/급식비만)
     const isNextMonth = !!(row.nextMonth && row.nextMonth[it.id]);
     const supportsNext = qItemSupportsNextMonth(it);
     const refundCellClass = 'q-cell-refund-item' + (isManual ? ' manual' : '') + (isNextMonth ? ' next-month' : '') + (calc.invalid && fee && !isNextMonth ? ' invalid' : '');
-    const refundDisplay = calc.refund > 0 ? '₩' + calc.refund.toLocaleString() : (fee ? '₩0' : '—');
-    // 환불액 셀 title — 룰 자동 표시 (마우스 오버 시)
+    // 빈 행 명확히 구분: fee 없으면 무조건 "—" 표시
+    let refundDisplay;
+    if(!fee || fee <= 0){
+      refundDisplay = '—';  // 빈 행 → 한눈에 미입력 표시
+    } else if(calc.refund > 0){
+      refundDisplay = '₩' + calc.refund.toLocaleString();
+    } else {
+      refundDisplay = '₩0';  // 금액 입력했는데 환불 0 (룰상 환불 불가)
+    }
+    // 환불액 셀 title — 룰 자동 표시 + 진단 정보 (마우스 오버 시)
     let ruleDesc = '';
     if(isManual){
       ruleDesc = '⚠️ 수동: ' + (row.manualReason && row.manualReason[it.id] ? row.manualReason[it.id] : '메모 없음');
@@ -6898,7 +7071,20 @@ function qRenderRow(row, idx, needsDate, supportsNewbie){
     } else {
       ruleDesc = '클릭 → 수동 변경';
     }
-    const titleText = ruleDesc;
+    // 진단 정보 추가 (사장님 디버깅용 - 마우스 hover 시 표시)
+    const _diag = [
+      '[진단 정보]',
+      '룰: ' + ruleDesc,
+      '환불액: ' + (calc.refund != null ? calc.refund : 'null'),
+      'invalid: ' + (calc.invalid || false),
+      'fee: ' + fee,
+      'isNewbie: ' + (row.isNewbie ? '✓' : '✗'),
+      'payDate: ' + (row.payDate || '없음'),
+      'leaveDate: ' + (row.leaveDate || '없음'),
+      'method: ' + (row.method[it.id] || '?'),
+      'item: ' + it.type + (it.subType ? '·' + it.subType : '')
+    ].join('\n');
+    const titleText = _diag;
     let cellInner = `<input type="text" class="q-refund-input" data-row="${row.tempId}" data-item="${it.id}" value="${refundDisplay}" placeholder="자동" title="${qEscape(titleText)}" onfocus="qOnRefundFocus(this,${row.tempId},'${it.id}')" onblur="qOnRefundBlur(this,${row.tempId},'${it.id}')" />`;
     // 급식비 → 학생별 식사 종류 드롭다운 (중식 / 석식 / 중석식)
     if(it.type === '급식비'){
@@ -7021,9 +7207,14 @@ function qUpdateSessions(tempId, itemId, which, value){
 function qUpdateFee(tempId, itemId, value){
   const row = qState.rows.find(r => r.tempId === tempId);
   if(!row) return;
-  row.fees[itemId] = value === '' ? null : (parseInt(value) || 0);
-  // 환불액·재결제 셀 갱신을 위해 전체 재렌더 (포커스는 잃지만 표가 작아서 OK)
-  // → 입력 중에 포커스 잃으면 짜증나므로 셀만 갱신
+  // 쉼표·공백·통화기호·한글 등 모두 제거 후 숫자만 추출
+  const cleaned = String(value).replace(/[^0-9.-]/g, '').trim();
+  if(cleaned === ''){
+    row.fees[itemId] = null;
+  } else {
+    const n = parseInt(cleaned);
+    row.fees[itemId] = isNaN(n) ? null : n;
+  }
   qRefreshRow(row);
   qUpdateTotalBox();
 }
@@ -7781,7 +7972,7 @@ function qSubmit(){
       }
     });
   } catch(e){}
-  closeQuickModal();
+  closeQuickModal(true);  // ⭐ 저장 성공 후 자동 닫기 — confirm 스킵
   toast('⚡ ' + validRows.length + '명 · ' + created + '건 저장 완료');
 }
 
@@ -8678,9 +8869,9 @@ function renderNonClassList(){
     const dateObj = new Date(d.date+'T00:00:00');
     const dow = ['일','월','화','수','목','금','토'][dateObj.getDay()];
     const tags = [];
-    if(d.affectClass) tags.push('<span class="nc-tag nc-class">수업</span>');
-    if(d.affectLunch) tags.push('<span class="nc-tag nc-lunch">중식</span>');
-    if(d.affectDinner) tags.push('<span class="nc-tag nc-dinner">석식</span>');
+    if(d.affectClass) tags.push('<span class="nc-tag nc-class">수업X</span>');
+    if(d.affectLunch) tags.push('<span class="nc-tag nc-lunch">중식X</span>');
+    if(d.affectDinner) tags.push('<span class="nc-tag nc-dinner">석식X</span>');
     if(tags.length === 0) tags.push('<span class="muted tiny">영향 없음</span>');
     return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:white;border:1px solid var(--border);border-radius:6px">
       <span style="font-size:13px;font-weight:600;color:var(--text);font-variant-numeric:tabular-nums;width:115px;flex-shrink:0">${d.date} (${dow})</span>
@@ -8701,7 +8892,7 @@ function addNonClassDay(){
   const reason = (reasonInp.value || '').trim();
   if(!date){ toast('날짜를 선택해주세요'); return; }
   if(!affectClass && !affectLunch && !affectDinner){
-    toast('영향(수업/중식/석식) 중 최소 하나는 체크해주세요');
+    toast('수업/중식/석식 중 최소 하나는 체크해주세요');
     return;
   }
   if(!settings.nonClassDayList) settings.nonClassDayList = [];
@@ -8718,9 +8909,10 @@ function addNonClassDay(){
   });
   _migrateNonClassDays(); // 동기화
   saveSettings();
+  // 입력 폼 초기화
   dateInp.value = '';
   reasonInp.value = '';
-  document.getElementById('setAffectClass').checked = true;
+  document.getElementById('setAffectClass').checked = false;
   document.getElementById('setAffectLunch').checked = false;
   document.getElementById('setAffectDinner').checked = false;
   renderNonClassList();
@@ -8731,7 +8923,14 @@ function addNonClassDay(){
 function removeNonClassDay(date){
   if(!settings.nonClassDayList) return;
   settings.nonClassDayList = settings.nonClassDayList.filter(d => d.date !== date);
-  _migrateNonClassDays(); // 동기화
+  // ⭐ 옛 구조(nonClassDays)도 즉시 동기화 — 안 그러면 마이그레이션이 다시 살려냄
+  settings.nonClassDays = (settings.nonClassDayList || [])
+    .filter(d => d.affectClass)
+    .map(d => d.date);
+  settings.nonClassReason = {};
+  (settings.nonClassDayList || []).forEach(d => {
+    if(d.reason) settings.nonClassReason[d.date] = d.reason;
+  });
   saveSettings();
   renderNonClassList();
   render();
