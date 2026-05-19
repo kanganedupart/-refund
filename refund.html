@@ -2225,45 +2225,34 @@ let selectedReason = null;
 // 초기 로드
 // ============================================================
 function load(){
-  // 1. localStorage 먼저 로드 (빠른 화면 표시)
-  try{
-    const raw = localStorage.getItem(LS_KEY);
-    if(raw) data = JSON.parse(raw);
-  }catch(e){console.error(e)}
-  if(!data || typeof data !== 'object') data = {refunds:[]};
-  if(!data.refunds) data.refunds = [];
+  // ⭐ localStorage 완전 제거 (사장님 룰 2026.05.19 - Firebase 단일 정본)
+  // 빈 데이터로 시작 → initAfterLogin에서 Firebase 로드 후 진짜 데이터 들어옴
+  data = {refunds:[]};
   archive = [];
-  // 설정 + 학생 로드
-  try{
-    const s = localStorage.getItem(LS_SETTINGS);
-    if(s) settings = Object.assign(settings, JSON.parse(s));
-    const st = localStorage.getItem(LS_STUDENTS);
-    if(st) students = JSON.parse(st);
-  }catch(e){console.error(e)}
+  // settings는 코드 기본값 그대로 시작 (Firebase에서 덮어쓸 예정)
+  // students도 빈 채로 시작 (Firebase에서 덮어쓸 예정)
+}
+
+// ⭐ Firebase 로드 후 settings 마이그레이션 (sortedAlphabetically 이후 호출)
+function migrateSettings(){
   // 직원 권한 맵 마이그레이션: settings에 있으면 사용, 없으면 기본 + 옛 'starter'/'chief' → 새 권한으로
   if(settings.staffRoles && typeof settings.staffRoles === 'object'){
-    // 옛 권한 마이그레이션
     Object.keys(settings.staffRoles).forEach(name => {
       const r = settings.staffRoles[name];
       if(r === 'starter') settings.staffRoles[name] = 'starter_normal';
       else if(r === 'chief') settings.staffRoles[name] = 'clerk';
     });
-    // STAFF_ROLES에도 반영 (메모리)
     Object.keys(settings.staffRoles).forEach(name => {
       STAFF_ROLES[name] = settings.staffRoles[name];
     });
   } else {
-    // 처음 — 코드 기본값을 settings에 복사
     settings.staffRoles = Object.assign({}, STAFF_ROLES);
   }
-  // 직원 명단 — settings.staff가 없거나 빈 경우만 기본값
   if(!settings.staff || settings.staff.length === 0){
     settings.staff = ['김지유','이혜진'];
   }
-  // 급식비 소분류 강제 덮어쓰기 (옛 '점심' 캐시 제거 — v3.15에서 변경)
   if(settings.subTypes){
     settings.subTypes['급식비'] = ['중식','석식','중식+석식'];
-    // 익월전액 소분류 보장 (옛 캐시 대비)
     if(!settings.subTypes['수강료'].includes('익월전액')){
       settings.subTypes['수강료'].push('익월전액');
     }
@@ -2271,40 +2260,13 @@ function load(){
       settings.subTypes['학사비'].push('익월전액');
     }
   }
-  // 1식 단가 마이그레이션: 옛 잘못된 기본값(15,800) → 사장님 룰(7,900)
-  // 사용자가 직접 다른 값으로 변경했으면 그대로 유지
   if(settings.mealDailyFee === 15800){
     settings.mealDailyFee = 7900;
   }
-  // cutDays 마이그레이션 (사장님 룰 2026.05.17 확정):
-  // 새 룰 = 퇴반일 포함 영업일 3일 차감 → 기본값 3
-  // 사장님이 직접 다른 값으로 변경했으면 그대로 유지
-  // 이전에 2로 바뀐 적이 있는 환경은 3으로 복원
   if(settings.mealCutDays === 2){
     settings.mealCutDays = 3;
   }
-  // 자동 모드 폐지: 항상 false
   settings.mealAutoCalc = false;
-  // 옛 refund 데이터의 '점심' subType이 있다면 '중식+석식'으로 마이그레이션
-  (data.refunds||[]).forEach(r => {
-    if(r.type === '급식비' && r.subType === '점심'){
-      r.subType = '중식+석식';
-    }
-    // 4단계 워크플로우 도입: approved 필드 추가 (옛 데이터)
-    if(r.approved === undefined){
-      // 이미 confirmed/done이면 당연히 승인된 상태로 추론
-      r.approved = !!(r.checked || r.done);
-      r.approvedAt = r.approved ? (r.checkedAt || r.createdAt) : null;
-      r.approvedBy = r.approved ? (r.checkedBy || r.staff) : null;
-    }
-    if(!r.bouncedHistory) r.bouncedHistory = [];
-    // 옛 bouncedAt 있으면 이력에 추가
-    if(r.bouncedAt && r.bouncedHistory.length === 0){
-      r.bouncedHistory.push({at: r.bouncedAt, by: r.bouncedBy || ''});
-    }
-  });
-  saveSettings();
-  // 빈 상태로 시작 (사장님이 직접 환불 입력)
 }
 
 function autoLoadSample(){
@@ -2313,50 +2275,40 @@ function autoLoadSample(){
   loadSampleData(true); // silent 모드 (개발용, 자동 호출 안 함)
 }
 
-// ⭐ Firebase 동기화 상태 (사장님 룰 2026.05.19)
-// - 모든 직원이 같은 데이터 공유
-// - localStorage = 빠른 로컬 캐시 (오프라인 대비)
-// - Firebase = 정본 (실시간 동기화)
-let _fbSaveTimer = null;
-let _fbSyncEnabled = true;        // false면 Firebase 저장 안 함 (마이그레이션 중)
+// ⭐ Firebase 동기화 상태 (사장님 룰 2026.05.19 - 최종)
+// - Firebase 단일 정본. localStorage 사용 안 함.
+// - 모든 직원이 같은 데이터 공유.
 let _fbApplyingRemote = false;    // 원격 변경 적용 중 (재저장 방지)
 let _fbLastWriteAt = 0;           // 마지막 우리 측 저장 시각
 
 function save(){
-  // 1. localStorage 즉시 저장 (빠른 로컬 캐시)
-  localStorage.setItem(LS_KEY, JSON.stringify(data));
-  // 2. Firebase 디바운싱 저장 (500ms 안에 여러 번 호출되면 마지막만 반영)
-  if(_fbApplyingRemote) return;  // 원격에서 받은 데이터 적용 중이면 재저장 안 함
-  if(!_fbSyncEnabled) return;     // 동기화 비활성화 상태
-  if(typeof firebase === 'undefined' || !firebase.database) return;
-  if(_fbSaveTimer) clearTimeout(_fbSaveTimer);
-  _fbSaveTimer = setTimeout(() => {
-    _fbSaveTimer = null;
-    try {
-      _fbLastWriteAt = Date.now();
-      firebase.database().ref('shared/refunds').set({
-        refunds: data.refunds || [],
-        updatedAt: _fbLastWriteAt
-      }).catch(err => {
-        console.error('[Firebase] 환불 저장 실패:', err);
-      });
-    } catch(e){
-      console.error('[Firebase] 저장 중 오류:', e);
-    }
-  }, 500);
+  // ⭐ Firebase 단일 저장 (즉시, 디바운싱 X)
+  if(_fbApplyingRemote) return;   // 원격에서 받은 데이터 적용 중이면 재저장 안 함
+  if(typeof firebase === 'undefined' || !firebase.database){
+    console.error('[Firebase] 라이브러리 없음 - 저장 실패!');
+    return;
+  }
+  _fbLastWriteAt = Date.now();
+  firebase.database().ref('shared/refunds').set({
+    refunds: data.refunds || [],
+    updatedAt: _fbLastWriteAt
+  }).catch(err => {
+    console.error('[Firebase] 환불 저장 실패:', err);
+    toast('⚠️ 저장 실패: 인터넷 연결 확인');
+  });
 }
 
 // ⭐ Firebase 실시간 동기화 시작 (페이지 로드 시 1회 호출)
 function startFirebaseSync(){
   if(typeof firebase === 'undefined' || !firebase.database){
-    console.warn('[Firebase] 라이브러리 없음, localStorage 단독 사용');
+    console.warn('[Firebase] 라이브러리 없음, 동기화 불가');
     return;
   }
   console.log('[Firebase] 환불 데이터 실시간 동기화 시작');
   firebase.database().ref('shared/refunds').on('value', snap => {
     const remote = snap.val();
     if(!remote || !remote.refunds){
-      console.log('[Firebase] 원격 데이터 없음, 첫 사용자 (localStorage → Firebase 업로드 예정)');
+      console.log('[Firebase] 원격 데이터 없음');
       return;
     }
     // 우리가 방금 저장한 거면 무시 (echo 방지)
@@ -2368,8 +2320,6 @@ function startFirebaseSync(){
     _fbApplyingRemote = true;
     try {
       data.refunds = remote.refunds || [];
-      localStorage.setItem(LS_KEY, JSON.stringify(data));
-      // 화면 다시 그리기 (메인 시트만 — 모달 열려있으면 그건 보존)
       if(typeof render === 'function'){
         try { render(); } catch(e){ console.error('[Firebase] render 실패:', e); }
       }
@@ -2397,27 +2347,34 @@ async function loadRefundsFromFirebase(){
   return null;
 }
 function saveSettings(){
-  localStorage.setItem(LS_SETTINGS, JSON.stringify(settings));
-  // ⭐ Firebase 동기화 (사장님 룰 2026.05.19)
-  // 휴강일·1식 단가·직원명단 등 모든 직원이 공유
+  // ⭐ Firebase 단일 저장 (사장님 룰 2026.05.19)
   if(_fbApplyingRemote) return;
-  if(!_fbSyncEnabled) return;
-  if(typeof firebase === 'undefined' || !firebase.database) return;
-  try {
-    firebase.database().ref('shared/settings').set({
-      settings: settings,
-      updatedAt: Date.now()
-    }).catch(err => {
-      console.error('[Firebase] 설정 저장 실패:', err);
-    });
-  } catch(e){
-    console.error('[Firebase] 설정 저장 오류:', e);
+  if(typeof firebase === 'undefined' || !firebase.database){
+    console.error('[Firebase] 라이브러리 없음 - 설정 저장 실패!');
+    return;
   }
+  firebase.database().ref('shared/settings').set({
+    settings: settings,
+    updatedAt: Date.now()
+  }).catch(err => {
+    console.error('[Firebase] 설정 저장 실패:', err);
+    toast('⚠️ 설정 저장 실패: 인터넷 연결 확인');
+  });
 }
 function saveStudents(){
-  localStorage.setItem(LS_STUDENTS, JSON.stringify(students));
+  // ⭐ Firebase 단일 저장 (사장님 룰 2026.05.19)
+  // 학생 로컬 메모는 환불 시스템 안에서 학생 정보 기억용
+  if(_fbApplyingRemote) return;
+  if(typeof firebase === 'undefined' || !firebase.database) return;
+  firebase.database().ref('shared/refundStudents').set({
+    students: students,
+    updatedAt: Date.now()
+  }).catch(err => {
+    console.error('[Firebase] 학생 메모 저장 실패:', err);
+  });
 }
 function saveArchive(){
+  // 보관 = 사용자 옵션 기능, 일단 localStorage 유지 (이 PC만)
   localStorage.setItem(LS_KEY + '_archive', JSON.stringify(archive));
 }
 
@@ -10995,9 +10952,9 @@ function initAfterLogin(){
   updateFilterBadge();
   rebuildStageSnapshot();
   render();
-  // ⭐ Firebase 환불 데이터 + 설정 첫 로드 + 실시간 동기화 시작 (사장님 룰 2026.05.19)
-  // 모든 직원이 같은 데이터 공유. localStorage는 빠른 캐시 + 오프라인 대비.
-  setTimeout(async () => {
+  // ⭐ Firebase 단일 정본 (사장님 룰 2026.05.19 - localStorage 완전 제거)
+  // 모든 데이터를 Firebase에서 받은 후에 화면 그림 (await)
+  (async () => {
     // 1. 설정 Firebase 로드
     try {
       const settingsSnap = await firebase.database().ref('shared/settings').once('value');
@@ -11007,40 +10964,70 @@ function initAfterLogin(){
         _fbApplyingRemote = true;
         try {
           settings = Object.assign(settings, remoteSettings.settings);
-          localStorage.setItem(LS_SETTINGS, JSON.stringify(settings));
         } finally {
           _fbApplyingRemote = false;
         }
+      } else {
+        console.log('[Firebase] 설정 없음, 기본값 사용');
       }
     } catch(e){
       console.error('[Firebase] 설정 로드 실패:', e);
     }
     // 2. 환불 데이터 Firebase 로드
-    const remote = await loadRefundsFromFirebase();
-    if(remote !== null){
-      // Firebase에 데이터 있으면 — 이게 정본. 로컬은 덮어쓰기.
+    const remoteRefunds = await loadRefundsFromFirebase();
+    if(remoteRefunds !== null){
       _fbApplyingRemote = true;
       try {
-        data.refunds = remote;
-        localStorage.setItem(LS_KEY, JSON.stringify(data));
-        render();
+        data.refunds = remoteRefunds;
       } finally {
         _fbApplyingRemote = false;
       }
-    } else if(data.refunds && data.refunds.length > 0){
-      // Firebase는 비어있고 로컬에는 데이터 있음 → 첫 사용자, 로컬을 Firebase로 업로드
-      console.log('[Firebase] 마이그레이션: localStorage → Firebase (' + data.refunds.length + '건)');
-      save();
     }
-    // 3. 설정 실시간 동기화
+    // 3. 학생 메모 Firebase 로드
+    try {
+      const stuSnap = await firebase.database().ref('shared/refundStudents').once('value');
+      const remoteStudents = stuSnap.val();
+      if(remoteStudents && remoteStudents.students){
+        console.log('[Firebase] 학생 메모 로드');
+        _fbApplyingRemote = true;
+        try {
+          students = remoteStudents.students;
+        } finally {
+          _fbApplyingRemote = false;
+        }
+      }
+    } catch(e){
+      console.error('[Firebase] 학생 메모 로드 실패:', e);
+    }
+    // 4. 옛 refund 데이터 + 설정 마이그레이션
+    migrateSettings();
+    (data.refunds||[]).forEach(r => {
+      if(r.type === '급식비' && r.subType === '점심'){
+        r.subType = '중식+석식';
+      }
+      if(r.approved === undefined){
+        r.approved = !!(r.checked || r.done);
+        r.approvedAt = r.approved ? (r.checkedAt || r.createdAt) : null;
+        r.approvedBy = r.approved ? (r.checkedBy || r.staff) : null;
+      }
+      if(!r.bouncedHistory) r.bouncedHistory = [];
+      if(r.bouncedAt && r.bouncedHistory.length === 0){
+        r.bouncedHistory.push({at: r.bouncedAt, by: r.bouncedBy || ''});
+      }
+    });
+    // 5. 화면 다시 그리기
+    rebuildStageSnapshot();
+    render();
+    console.log('[Firebase] 초기 로드 완료, 환불', data.refunds.length, '건');
+    // 6. 설정 실시간 동기화
     firebase.database().ref('shared/settings').on('value', snap => {
       const remote = snap.val();
       if(!remote || !remote.settings) return;
       if(remote.updatedAt && Math.abs(remote.updatedAt - _fbLastWriteAt) < 1000) return;
+      console.log('[Firebase] 설정 원격 변경');
       _fbApplyingRemote = true;
       try {
         settings = Object.assign(settings, remote.settings);
-        localStorage.setItem(LS_SETTINGS, JSON.stringify(settings));
         if(typeof renderSettings === 'function'){
           try { renderSettings(); } catch(e){}
         }
@@ -11051,9 +11038,21 @@ function initAfterLogin(){
         _fbApplyingRemote = false;
       }
     });
-    // 4. 환불 데이터 실시간 동기화
+    // 7. 학생 메모 실시간 동기화
+    firebase.database().ref('shared/refundStudents').on('value', snap => {
+      const remote = snap.val();
+      if(!remote || !remote.students) return;
+      if(remote.updatedAt && Math.abs(remote.updatedAt - _fbLastWriteAt) < 1000) return;
+      _fbApplyingRemote = true;
+      try {
+        students = remote.students;
+      } finally {
+        _fbApplyingRemote = false;
+      }
+    });
+    // 8. 환불 데이터 실시간 동기화
     startFirebaseSync();
-  }, 100);
+  })();
 }
 
 // 시작 시 세션 체크 — 이미 로그인된 상태면 자동 통과
