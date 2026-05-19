@@ -2048,15 +2048,72 @@ function hashPw(pw){
   return 'h' + Math.abs(h).toString(36);
 }
 
+// ⭐ 직원 비번 - Firebase 단일 정본 (사장님 룰 2026.05.19)
+// 메모리 캐시로 동기 접근 가능하게. 변경 시 Firebase 즉시 업로드.
+let _staffPwCache = {};   // 메모리 캐시
+let _staffPwLoaded = false;
+
 function getStaffPasswords(){
-  try {
-    const raw = localStorage.getItem(LS_STAFF_PW);
-    return raw ? JSON.parse(raw) : {};
-  } catch(e){ return {}; }
+  // 메모리 캐시에서 즉시 반환 (Firebase 로드는 부팅 시 한 번)
+  return _staffPwCache;
 }
 
 function saveStaffPasswords(pwMap){
-  localStorage.setItem(LS_STAFF_PW, JSON.stringify(pwMap));
+  _staffPwCache = pwMap;
+  if(typeof firebase === 'undefined' || !firebase.database){
+    console.error('[Firebase] 라이브러리 없음 - 비번 저장 실패!');
+    return;
+  }
+  firebase.database().ref('shared/staffPasswords').set({
+    passwords: pwMap,
+    updatedAt: Date.now()
+  }).catch(err => {
+    console.error('[Firebase] 비번 저장 실패:', err);
+    toast('⚠️ 비번 저장 실패: 인터넷 확인');
+  });
+}
+
+// 부팅 시 비번 Firebase 로드
+async function loadStaffPasswordsFromFirebase(){
+  if(typeof firebase === 'undefined' || !firebase.database) return;
+  try {
+    const snap = await firebase.database().ref('shared/staffPasswords').once('value');
+    const remote = snap.val();
+    if(remote && remote.passwords){
+      _staffPwCache = remote.passwords;
+      console.log('[Firebase] 직원 비번 ' + Object.keys(remote.passwords).length + '명 로드');
+    } else {
+      _staffPwCache = {};
+      console.log('[Firebase] 직원 비번 없음, 빈 상태 시작');
+    }
+    // ⭐ 학원 PC localStorage에 옛 비번 있으면 자동 마이그레이션 (사장님 룰 2026.05.19)
+    try {
+      const localRaw = localStorage.getItem(LS_STAFF_PW);
+      if(localRaw){
+        const localMap = JSON.parse(localRaw);
+        let migrated = 0;
+        Object.keys(localMap).forEach(name => {
+          if(!_staffPwCache[name]){
+            _staffPwCache[name] = localMap[name];
+            migrated++;
+          }
+        });
+        if(migrated > 0){
+          console.log('[마이그레이션] localStorage → Firebase 비번 ' + migrated + '명 옮김');
+          // Firebase로 업로드 (saveStaffPasswords가 이미 Firebase 저장 처리)
+          firebase.database().ref('shared/staffPasswords').set({
+            passwords: _staffPwCache,
+            updatedAt: Date.now()
+          });
+        }
+      }
+    } catch(e){ /* localStorage 없으면 무시 */ }
+    _staffPwLoaded = true;
+  } catch(e){
+    console.error('[Firebase] 비번 로드 실패:', e);
+    _staffPwCache = {};
+    _staffPwLoaded = true;  // 실패해도 로드 시도 완료로 표시 (어드민 로그인은 가능)
+  }
 }
 
 // 직원 추가 시 자동 호출 — 비번 없으면 0000으로 설정
@@ -2093,6 +2150,10 @@ function tryLogin(staffName, pw){
       return { ok: true, role: 'admin', name: 'admin' };
     }
     return { ok: false, reason: '어드민 비밀번호가 틀려요' };
+  }
+  // ⭐ 비번 Firebase 로드 안 끝났으면 안내 (사장님 룰 2026.05.19)
+  if(!_staffPwLoaded){
+    return { ok: false, reason: '서버 연결 중이에요. 잠시 후 다시 시도해주세요' };
   }
   // 직원 로그인
   const map = getStaffPasswords();
@@ -11057,6 +11118,11 @@ function initAfterLogin(){
 
 // 시작 시 세션 체크 — 이미 로그인된 상태면 자동 통과
 (function checkSession(){
+  // ⭐ 페이지 부팅 시 직원 비번 Firebase 로드 (로그인 화면 표시 전에 미리 받기)
+  // 사장님 룰 2026.05.19 — 모든 직원 비번이 Firebase 공유
+  loadStaffPasswordsFromFirebase().then(() => {
+    console.log('[로그인] 직원 비번 준비 완료');
+  });
   const sess = getCurrentSession();
   if(!sess){
     // 비로그인 → 로그인 화면 보임 (CSS가 처리)
