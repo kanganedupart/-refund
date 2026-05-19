@@ -2064,9 +2064,18 @@ function saveStaffPasswords(pwMap){
     console.error('[Firebase] 라이브러리 없음 - 비번 저장 실패!');
     return;
   }
-  firebase.database().ref('shared/staffPasswords').set({
-    passwords: pwMap,
-    updatedAt: Date.now()
+  // ⭐ 안전망 (사장님 룰 2026.05.19) — Firebase 기존 데이터와 병합 후 저장
+  // 이유: 다른 PC에서 등록한 직원 비번을 실수로 덮어쓰지 않도록
+  firebase.database().ref('shared/staffPasswords').once('value').then(snap => {
+    const remote = snap.val();
+    const remotePwds = (remote && remote.passwords) ? remote.passwords : {};
+    // 병합: 기존 Firebase 비번 + 새로 추가/변경된 비번
+    const merged = Object.assign({}, remotePwds, pwMap);
+    _staffPwCache = merged;
+    return firebase.database().ref('shared/staffPasswords').set({
+      passwords: merged,
+      updatedAt: Date.now()
+    });
   }).catch(err => {
     console.error('[Firebase] 비번 저장 실패:', err);
     toast('⚠️ 비번 저장 실패: 인터넷 확인');
@@ -2157,6 +2166,13 @@ function tryLogin(staffName, pw){
   }
   // 직원 로그인
   const map = getStaffPasswords();
+  // ⭐ 자동 복구 (사장님 룰 2026.05.19) — 직원 명단에 있는데 비번이 없으면 자동으로 0000 만들어줌
+  // 이유: Firebase 동기화 사고로 비번만 사라진 경우 대비
+  if(!map[staffName] && Array.isArray(settings.staff) && settings.staff.includes(staffName)){
+    console.log('[로그인] 자동 복구: ' + staffName + ' 비번 0000으로 생성');
+    map[staffName] = hashPw(DEFAULT_PASSWORD);
+    saveStaffPasswords(map);
+  }
   if(!map[staffName]){
     return { ok: false, reason: '등록되지 않은 직원이에요' };
   }
@@ -11122,6 +11138,22 @@ function initAfterLogin(){
     }
     // 4. 옛 refund 데이터 + 설정 마이그레이션
     migrateSettings();
+    // ⭐ Firebase 로드 후 — 등록된 직원 전원 비번 자동 보장 (사장님 룰 2026.05.19)
+    // 이유: 직원 명단에 있는데 비번이 Firebase에 없으면 자동으로 0000 만듦
+    if(settings.staff && Array.isArray(settings.staff) && _staffPwLoaded){
+      let needSave = false;
+      const pwMap = getStaffPasswords();
+      settings.staff.forEach(name => {
+        if(!pwMap[name]){
+          console.log('[자동복구] 직원 ' + name + ' 비번 0000으로 생성');
+          pwMap[name] = hashPw(DEFAULT_PASSWORD);
+          needSave = true;
+        }
+      });
+      if(needSave){
+        saveStaffPasswords(pwMap);
+      }
+    }
     (data.refunds||[]).forEach(r => {
       if(r.type === '급식비' && r.subType === '점심'){
         r.subType = '중식+석식';
