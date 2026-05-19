@@ -2430,9 +2430,39 @@ function saveSettings(){
     console.error('[Firebase] 라이브러리 없음 - 설정 저장 실패!');
     return;
   }
-  firebase.database().ref('shared/settings').set({
-    settings: settings,
-    updatedAt: Date.now()
+  // ⭐ 안전망 — settings.staff(직원 명단)는 Firebase 기존 값과 합집합 (사장님 룰 2026.05.19)
+  // 이유: 다른 PC에서 등록한 직원을 실수로 덮어쓰지 않도록
+  firebase.database().ref('shared/settings').once('value').then(snap => {
+    const remote = snap.val();
+    const remoteSettings = (remote && remote.settings) ? remote.settings : {};
+    const remoteStaff = Array.isArray(remoteSettings.staff) ? remoteSettings.staff : [];
+    const localStaff = Array.isArray(settings.staff) ? settings.staff : [];
+    // 합집합 (중복 제거)
+    const mergedStaff = [...new Set([...remoteStaff, ...localStaff])];
+    // staffRoles도 병합 (로컬 우선)
+    const mergedRoles = Object.assign({}, remoteSettings.staffRoles || {}, settings.staffRoles || {});
+    // 메모리에도 반영
+    settings.staff = mergedStaff;
+    settings.staffRoles = mergedRoles;
+    // 저장
+    return firebase.database().ref('shared/settings').set({
+      settings: settings,
+      updatedAt: Date.now()
+    });
+  }).then(() => {
+    // 저장 후: 모든 직원 비번 자동 보장
+    if(_staffPwLoaded && Array.isArray(settings.staff)){
+      const pwMap = getStaffPasswords();
+      let changed = false;
+      settings.staff.forEach(name => {
+        if(!pwMap[name]){
+          pwMap[name] = hashPw(DEFAULT_PASSWORD);
+          changed = true;
+          console.log('[자동복구] ' + name + ' 비번 0000 생성');
+        }
+      });
+      if(changed) saveStaffPasswords(pwMap);
+    }
   }).catch(err => {
     console.error('[Firebase] 설정 저장 실패:', err);
     toast('⚠️ 설정 저장 실패: 인터넷 연결 확인');
