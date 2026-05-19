@@ -5278,11 +5278,12 @@ function addLine(type, subType){
   if(type === '교재비' || (type === '패드비' && sub === '대여료')){
     line.showManual = true;
   }
-  // ⭐ 새 항목 추가 시 — 첫 줄의 납부일·퇴반일 자동 복사 (사장님 룰 2026.05.18)
+  // ⭐ 새 항목 추가 시 — 첫 줄의 납부일·퇴반일 자동 복사 (사장님 룰 2026.05.19)
+  // newLine()이 오늘 날짜로 채워도 첫 줄 값으로 덮어쓰기 (사용자 입력이 우선)
   if(modalState.lines.length > 0){
     const first = modalState.lines[0];
-    if(first.payDate && !line.payDate) line.payDate = first.payDate;
-    if(first.leaveDate && !line.leaveDate) line.leaveDate = first.leaveDate;
+    if(first.payDate) line.payDate = first.payDate;
+    if(first.leaveDate) line.leaveDate = first.leaveDate;
   }
   modalState.lines.push(line);
   renderLines();
@@ -5304,6 +5305,12 @@ function updateLineField(tempId, field, value){
   const line = modalState.lines.find(l=>l.tempId===tempId);
   if(!line) return;
   line[field] = value;
+  // ⭐ refundMode 변경 시 UI 구조 다시 그리기 (사장님 룰 2026.05.19)
+  // 횟수(proportional) 선택 시 → 강좌명/총회수/들은횟수 입력란 자동 표시
+  if(field === 'refundMode'){
+    renderLines();
+    return;
+  }
   // 자동계산만 다시
   recalcLine(tempId);
   updateTotal();
@@ -5347,10 +5354,9 @@ function onRefundAmountInput(tempId, value){
     if(isManualNow) cellWrap.classList.add('manual');
     else cellWrap.classList.remove('manual');
   }
-  // 수동 ↔ 자동 전환 시 메모 placeholder 갱신 필요 → renderLines
-  if(wasManual !== isManualNow){
-    renderLines();
-  }
+  // ⭐ 사장님 룰 2026.05.19 — renderLines() 호출 제거
+  // 메모 placeholder가 이제 항상 "메모 (선택)" 고정이라 재렌더링 불필요
+  // 색상·배지는 이미 위에서 클래스 토글로 처리됨 → 포커스 유지하면서 타이핑 가능
 }
 
 // ⭐ 환불액 input blur 시 — ₩ + 콤마 자동 추가
@@ -9210,16 +9216,9 @@ async function searchStudent(){
 function renderSearchList(list, localMatches, fbOnly, rawQ, isInitial){
   const all = [...localMatches.slice(0, 6), ...fbOnly.slice(0, 6)];
   if(all.length === 0){
-    list.innerHTML = `<div class="search-item search-empty" style="cursor:default;color:var(--text-muted);font-size:12px;background:#fafaf8">
-      <div style="display:flex;align-items:center;gap:8px">
-        <span style="font-size:14px">📝</span>
-        <div>
-          <div style="font-weight:600;color:var(--text)">처음 보는 학생이에요</div>
-          <div style="font-size:11px;margin-top:2px">아래 칸에 정보 입력하면 저장돼서 다음부턴 자동으로 떠요${isInitial ? ' (초성 검색 결과 없음)' : ''}</div>
-        </div>
-      </div>
-    </div>`;
-    list.classList.add('show');
+    // ⭐ 사장님 룰 2026.05.19 — 매칭 없으면 드롭다운 자체 안 띄움
+    list.classList.remove('show');
+    list.innerHTML = '';
     return;
   }
   let html = '';
