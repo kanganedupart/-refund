@@ -5771,19 +5771,10 @@ function updateTotal(){
   const guideText = document.getElementById('summaryGuideText');
   if(totalEl) totalEl.textContent = '₩' + total.toLocaleString();
   if(box) box.style.display = modalState.lines.length > 0 ? 'block' : 'none';
-  if(rechargeTotal > 0){
-    if(rechargeRow) rechargeRow.style.display = 'flex';
-    if(rechargeEl) rechargeEl.textContent = '₩' + rechargeTotal.toLocaleString();
-    if(guideBox) guideBox.style.display = 'block';
-    if(guideText){
-      guideText.innerHTML = '학부모님께 <b>₩' + rechargeTotal.toLocaleString() + 
-        '</b> 재결제 부탁드립니다.<br>재결제 확인 후 환불 <b>₩' + total.toLocaleString() + 
-        '</b>이 학부모 카드로 돌아갑니다.';
-    }
-  } else {
-    if(rechargeRow) rechargeRow.style.display = 'none';
-    if(guideBox) guideBox.style.display = 'none';
-  }
+  // ⭐ 재결제 큰 글씨 + 안내 텍스트 영구 숨김 (사장님 룰 2026.05.19)
+  // 재결제는 줄 아래 작은 노랑 배지로만 표시 (빠른모달과 통일)
+  if(rechargeRow) rechargeRow.style.display = 'none';
+  if(guideBox) guideBox.style.display = 'none';
 }
 
 // ============ 줄 렌더링 ============
