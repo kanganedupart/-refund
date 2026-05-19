@@ -5094,11 +5094,63 @@ function handleStudentInfoKey(e){
   if(cur && cur.id === 'fBank'){
     if(handleBankKeydown(e)) return;  // 드롭다운이 처리하면 끝
   }
-  // ⭐ 학생 이름 input일 때: 학생 검색 드롭다운이 화살표·Enter 처리 (기존 로직)
+  // ⭐ 학생 이름 input일 때: 학생 검색 드롭다운 키보드 처리 (사장님 룰 2026.05.19)
   const searchList = document.getElementById('searchList');
   const bankList = document.getElementById('bankList');
   const searchOpen = searchList && searchList.classList.contains('show');
   const bankOpen = bankList && bankList.classList.contains('show');
+  
+  // 학생 검색 드롭다운 ↓↑ Enter 처리
+  if(cur && cur.id === 'fName' && searchOpen){
+    const items = searchList.querySelectorAll('.search-item');
+    if(items.length === 0){
+      // 항목 없으면 기본 동작 (Tab/Enter는 아래로)
+    } else if(e.key === 'ArrowDown'){
+      e.preventDefault();
+      const cur2 = searchList.querySelector('.search-item.active');
+      let nextIdx = 0;
+      if(cur2){
+        const curIdx = Array.from(items).indexOf(cur2);
+        nextIdx = (curIdx + 1) % items.length;
+        cur2.classList.remove('active');
+      }
+      items[nextIdx].classList.add('active');
+      items[nextIdx].scrollIntoView({block:'nearest'});
+      return;
+    } else if(e.key === 'ArrowUp'){
+      e.preventDefault();
+      const cur2 = searchList.querySelector('.search-item.active');
+      let prevIdx = items.length - 1;
+      if(cur2){
+        const curIdx = Array.from(items).indexOf(cur2);
+        prevIdx = (curIdx - 1 + items.length) % items.length;
+        cur2.classList.remove('active');
+      }
+      items[prevIdx].classList.add('active');
+      items[prevIdx].scrollIntoView({block:'nearest'});
+      return;
+    } else if(e.key === 'Enter'){
+      const active = searchList.querySelector('.search-item.active');
+      if(active){
+        e.preventDefault();
+        // active 항목 클릭 시뮬레이션 (onclick 호출)
+        const onclickAttr = active.getAttribute('onclick');
+        if(onclickAttr){
+          // 안전하게 함수 호출
+          try {
+            new Function(onclickAttr).call(active);
+          } catch(err){
+            console.error('[학생 선택] 클릭 시뮬레이션 실패:', err);
+          }
+        }
+        return;
+      }
+    } else if(e.key === 'Escape'){
+      e.preventDefault();
+      searchList.classList.remove('show');
+      return;
+    }
+  }
   if(searchOpen && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter')) return;
   if(bankOpen && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter')) return;
 
@@ -5622,8 +5674,16 @@ function recalcLine(tempId){
       // 배지 제거
       const badge = resultEl.querySelector('.line-manual-badge');
       if(badge) badge.remove();
+    } else if(c && c.refund === 0 && c.rule && c.rule !== '-' && c.rule !== '금액 없음'){
+      // ⭐ 환불 불가 케이스 (1/2 초과 등) → ₩0 명시 표시 (사장님 룰 2026.05.19)
+      resultEl.classList.remove('manual');
+      if(!isFocused){
+        refundInput.value = '₩0';
+      }
+      const badge = resultEl.querySelector('.line-manual-badge');
+      if(badge) badge.remove();
     } else {
-      // 계산 불가 (날짜·기준액 입력 대기)
+      // 계산 불가 (날짜·기준액 입력 대기) → 빈 칸
       resultEl.classList.remove('manual');
       if(!isFocused){
         refundInput.value = '';
@@ -9169,17 +9229,12 @@ function renderSearchList(list, localMatches, fbOnly, rawQ, isInitial){
       <b>${s.name}</b><span class="small">${s.holder||''} ${s.bank||''} ${s.account||''}</span>
     </div>`;
   });
-  // 구분선
-  if(localMatches.length > 0 && fbOnly.length > 0){
-    html += `<div style="padding:4px 10px;font-size:10.5px;color:#9ca3af;background:#fafaf8;border-top:1px dashed #e5e5e0">👤 학생 명단 (계좌 정보 없음)</div>`;
-  } else if(localMatches.length === 0 && fbOnly.length > 0){
-    html += `<div style="padding:4px 10px;font-size:10.5px;color:#9ca3af;background:#fafaf8">👤 학생 명단 (계좌 정보 없음 — 입력 후 저장하면 다음엔 자동으로 떠요)</div>`;
-  }
+  // 구분선·안내문 제거 (사장님 룰 2026.05.19) — 깔끔하게 학생 이름만
   // Firebase 학생 (이름만, 계좌 정보 없음)
   fbOnly.slice(0, 6).forEach(s => {
     const safeName = s.name.replace(/'/g, "\\'");
     html += `<div class="search-item" onclick="pickFirebaseStudent('${safeName}')">
-      <b>${s.name}</b><span class="small" style="color:#3b82f6">👤 학생 명단</span>
+      <b>${s.name}</b>
     </div>`;
   });
   list.innerHTML = html;
