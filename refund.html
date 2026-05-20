@@ -2423,14 +2423,26 @@ async function loadRefundsFromFirebase(){
   }
   return null;
 }
-function saveSettings(){
+// ⭐ skipMerge=true: 삭제처럼 명단을 줄이는 작업 시 사용 (합집합 X, 통째 덮어쓰기)
+function saveSettings(skipMerge){
   // ⭐ Firebase 단일 저장 (사장님 룰 2026.05.19)
   if(_fbApplyingRemote) return;
   if(typeof firebase === 'undefined' || !firebase.database){
     console.error('[Firebase] 라이브러리 없음 - 설정 저장 실패!');
     return;
   }
-  // ⭐ 안전망 — settings.staff(직원 명단)는 Firebase 기존 값과 합집합 (사장님 룰 2026.05.19)
+  if(skipMerge){
+    // 삭제 모드: 합집합 X, 통째 저장 (로컬 settings 그대로)
+    firebase.database().ref('shared/settings').set({
+      settings: settings,
+      updatedAt: Date.now()
+    }).catch(err => {
+      console.error('[Firebase] 설정 저장 실패:', err);
+      toast('⚠️ 설정 저장 실패: 인터넷 확인');
+    });
+    return;
+  }
+  // ⭐ 일반 모드: settings.staff(직원 명단)는 Firebase 기존 값과 합집합 (사장님 룰 2026.05.19)
   // 이유: 다른 PC에서 등록한 직원을 실수로 덮어쓰지 않도록
   firebase.database().ref('shared/settings').once('value').then(snap => {
     const remote = snap.val();
@@ -2462,6 +2474,10 @@ function saveSettings(){
         }
       });
       if(changed) saveStaffPasswords(pwMap);
+    }
+    // 화면 갱신
+    if(typeof renderStaffSettings === 'function'){
+      try { renderStaffSettings(); } catch(e){}
     }
   }).catch(err => {
     console.error('[Firebase] 설정 저장 실패:', err);
@@ -9883,7 +9899,18 @@ function removeStaff(i){
   settings.staff.splice(i, 1);
   delete STAFF_ROLES[name];
   if(settings.staffRoles) delete settings.staffRoles[name];
-  saveSettings();
+  // ⭐ 비번도 같이 삭제 (Firebase 동기) (사장님 룰 2026.05.19)
+  if(typeof firebase !== 'undefined' && firebase.database){
+    const pwMap = Object.assign({}, _staffPwCache);
+    delete pwMap[name];
+    _staffPwCache = pwMap;
+    firebase.database().ref('shared/staffPasswords').set({
+      passwords: pwMap,
+      updatedAt: Date.now()
+    });
+  }
+  // ⭐ skipMerge=true — 삭제이므로 합집합 안 함 (사장님 룰 2026.05.19)
+  saveSettings(true);
   toast(`${name} 삭제됨`);
   renderStaffSettings();
   renderStaffFilter();
