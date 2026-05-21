@@ -2064,6 +2064,12 @@ function saveStaffPasswords(pwMap){
     console.error('[Firebase] 라이브러리 없음 - 비번 저장 실패!');
     return;
   }
+  // ⭐ 로딩 가드 (2026.05.21) — 비번 첫 로드 끝나기 전엔 저장 안 함.
+  //   이유: 켜자마자 빈 비번맵이 Firebase 진짜 비번을 덮어쓰는 사고 방지.
+  if(!_staffPwLoaded){
+    console.warn('[Firebase] 비번 아직 로드 전 — 저장 보류 (비번 보호)');
+    return;
+  }
   // ⭐ 안전망 (사장님 룰 2026.05.19) — Firebase 기존 데이터와 병합 후 저장
   // 이유: 다른 PC에서 등록한 직원 비번을 실수로 덮어쓰지 않도록
   firebase.database().ref('shared/staffPasswords').once('value').then(snap => {
@@ -2361,6 +2367,8 @@ function autoLoadSample(){
 let _fbApplyingRemote = false;    // 원격 변경 적용 중 (재저장 방지)
 let _fbLastWriteAt = 0;           // 마지막 우리 측 저장 시각
 let _fbRefundsLoaded = false;     // ⭐ 환불 데이터 Firebase 첫 로드 완료 여부
+let _fbSettingsLoaded = false;    // ⭐ 설정(직원명단 포함) Firebase 첫 로드 완료 여부
+let _fbStudentsLoaded = false;    // ⭐ 학생 메모 Firebase 첫 로드 완료 여부
 // ⭐ 직전에 Firebase와 일치했던 환불 상태 스냅샷 { id: JSON문자열 }
 //    save() 때 이것과 현재 data.refunds를 비교해 "바뀐 것만" 골라냄.
 let _fbRefundSnapshot = {};
@@ -2385,6 +2393,43 @@ function _blockIfNotLoaded(){
     return true;
   }
   return false;
+}
+
+// ⭐ 저장 실패 안전망 (2026.05.21)
+//   인터넷이 끊겨 저장이 실패하면: 화면 상단에 눈에 띄는 빨간 배너를 띄우고,
+//   몇 초 간격으로 자동 재시도. 직원이 실패를 놓쳐서 작업이 유실되는 것 방지.
+let _saveFailed = false;          // 현재 저장 실패 상태인가
+let _saveRetryTimer = null;       // 자동 재시도 타이머
+
+function _showSaveFailBanner(){
+  let el = document.getElementById('saveFailBanner');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'saveFailBanner';
+    el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;'
+      + 'background:#c0392b;color:#fff;font-size:13.5px;font-weight:700;'
+      + 'padding:9px 14px;text-align:center;font-family:inherit;'
+      + 'box-shadow:0 2px 8px rgba(0,0,0,0.25);cursor:pointer';
+    el.onclick = function(){ _retrySaveNow(); };
+    document.body.appendChild(el);
+  }
+  el.textContent = '⚠️ 저장 안 됨 — 인터넷 연결을 확인하세요. 자동으로 다시 시도 중… (눌러서 즉시 재시도)';
+  el.style.display = 'block';
+}
+function _hideSaveFailBanner(){
+  const el = document.getElementById('saveFailBanner');
+  if(el) el.style.display = 'none';
+}
+function _retrySaveNow(){
+  if(_saveRetryTimer){ clearTimeout(_saveRetryTimer); _saveRetryTimer = null; }
+  save();
+}
+function _scheduleSaveRetry(){
+  if(_saveRetryTimer) return;  // 이미 예약돼 있으면 중복 안 함
+  _saveRetryTimer = setTimeout(function(){
+    _saveRetryTimer = null;
+    if(_saveFailed) save();    // 아직 실패 상태면 다시 시도
+  }, 5000);                    // 5초 후 재시도
 }
 
 function save(){
@@ -2434,12 +2479,74 @@ function save(){
     // 저장 성공 → 스냅샷을 현재 상태로 갱신
     _fbRefundSnapshot = cur;
     console.log('[Firebase] 환불 ' + changed + '건 갱신 저장');
+    // ⭐ 저장 성공 — 실패 상태였다면 해제 + 배너 숨김 + 백업
+    if(_saveFailed){
+      _saveFailed = false;
+      _hideSaveFailBanner();
+      toast('✓ 인터넷 복구됨 — 저장 완료');
+    }
+    _backupRefunds();   // ⭐ 저장 성공 시마다 백업 사본 남김
   }).catch(err => {
     console.error('[Firebase] 환불 저장 실패:', err);
-    toast('⚠️ 저장 실패: 인터넷 연결 확인');
+    // ⭐ 저장 실패 — 배너 띄우고 자동 재시도 예약
+    _saveFailed = true;
+    _showSaveFailBanner();
+    _scheduleSaveRetry();
   });
 }
 
+// ⭐ 자동 백업 (2026.05.21)
+//   저장이 성공할 때마다 환불 데이터 전체 사본을 Firebase의 별도 공간에 남긴다.
+//   경로: shared/refundsBackups/{날짜} = { items:{...}, savedAt, count }
+//   하루 1개(그날 마지막 상태)만 유지, 최근 7일치 보관. 사고 시 되돌릴 수단.
+//   ⚠️ 백업은 별도 경로라서, 실수로 본 데이터를 지워도 여기 사본은 남아있음.
+let _lastBackupDay = '';
+function _backupRefunds(){
+  if(typeof firebase === 'undefined' || !firebase.database) return;
+  // 샘플 제외한 진짜 데이터만 백업
+  const real = (data.refunds || []).filter(r => r && !r._sample);
+  if(real.length === 0) return;   // 빈 데이터는 백업 안 함 (사고 사본 방지)
+  const now = new Date();
+  const day = now.toISOString().slice(0,10);   // 'YYYY-MM-DD'
+  const items = {};
+  real.forEach(r => { if(r.id != null) items[String(r.id)] = r; });
+  // 그날 백업 (하루 여러 번 저장돼도 같은 날짜 키에 덮어써져 1개만 유지)
+  firebase.database().ref('shared/refundsBackups/' + day).set({
+    items: items,
+    savedAt: now.toISOString(),
+    count: real.length
+  }).then(() => {
+    if(_lastBackupDay !== day){
+      _lastBackupDay = day;
+      console.log('[백업] ' + day + ' 환불 ' + real.length + '건 백업 완료');
+      _pruneOldBackups();   // 새 날짜가 생겼을 때만 오래된 것 정리
+    }
+  }).catch(err => {
+    // 백업 실패는 본 저장에 영향 주지 않음 (조용히 로그만)
+    console.error('[백업] 실패(본 데이터는 안전):', err);
+  });
+}
+// 7일보다 오래된 백업 삭제 (공간 절약)
+function _pruneOldBackups(){
+  if(typeof firebase === 'undefined' || !firebase.database) return;
+  firebase.database().ref('shared/refundsBackups').once('value').then(snap => {
+    const all = snap.val();
+    if(!all) return;
+    const days = Object.keys(all).sort();   // 날짜 오름차순
+    if(days.length <= 7) return;
+    // 가장 오래된 것부터 7개 남기고 삭제
+    const toDelete = days.slice(0, days.length - 7);
+    toDelete.forEach(d => {
+      firebase.database().ref('shared/refundsBackups/' + d).remove()
+        .catch(e => console.error('[백업] 오래된 백업 삭제 실패:', e));
+    });
+    if(toDelete.length > 0){
+      console.log('[백업] 오래된 백업 ' + toDelete.length + '일치 정리');
+    }
+  }).catch(err => {
+    console.error('[백업] 정리 중 오류:', err);
+  });
+}
 // ⭐ Firebase 원격 데이터 → 환불 배열 변환
 //    새 구조: { items: { id1:{...}, id2:{...} }, updatedAt }
 //    옛 구조: { refunds: [ {...}, {...} ], updatedAt }  ← 자동 호환
@@ -2537,6 +2644,12 @@ async function loadRefundsFromFirebase(){
 function saveSettings(skipMerge){
   // ⭐ Firebase 단일 저장 (사장님 룰 2026.05.19)
   if(_fbApplyingRemote) return;
+  // ⭐ 로딩 가드 (2026.05.21) — 설정 첫 로드 끝나기 전엔 저장 안 함.
+  //   이유: 켜자마자 빈/기본 settings(직원명단)가 Firebase 진짜 명단을 덮어쓰는 사고 방지.
+  if(!_fbSettingsLoaded){
+    console.warn('[Firebase] 설정 아직 로드 전 — 저장 보류 (직원 명단 보호)');
+    return;
+  }
   if(typeof firebase === 'undefined' || !firebase.database){
     console.error('[Firebase] 라이브러리 없음 - 설정 저장 실패!');
     return;
@@ -2603,6 +2716,11 @@ function saveStudents(){
   // ⭐ Firebase 단일 저장 (사장님 룰 2026.05.19)
   // 학생 로컬 메모는 환불 시스템 안에서 학생 정보 기억용
   if(_fbApplyingRemote) return;
+  // ⭐ 로딩 가드 (2026.05.21) — 학생 메모 첫 로드 끝나기 전엔 저장 안 함.
+  if(!_fbStudentsLoaded){
+    console.warn('[Firebase] 학생 메모 아직 로드 전 — 저장 보류');
+    return;
+  }
   if(typeof firebase === 'undefined' || !firebase.database) return;
   firebase.database().ref('shared/refundStudents').set({
     students: students,
@@ -10704,6 +10822,21 @@ function archiveDone(){
 
 function clearAllData(){
   if(_blockIfNotLoaded()) return;
+  // ⭐ 안전장치 (2026.05.21): 전체 삭제는 어드민만. 실수/사고 방지.
+  if(currentRole() !== 'admin'){
+    toast('⚠️ 전체 삭제는 관리자(어드민)만 할 수 있어요');
+    return;
+  }
+  // ⭐ 이중 확인 — 삭제될 건수를 직접 보여주고 한 번 더 묻는다
+  const cnt = (data.refunds || []).filter(r => !r._sample).length;
+  if(cnt > 0){
+    const typed = prompt('⚠️ 환불 내역 ' + cnt + '건이 영구 삭제됩니다.\n되돌릴 수 없습니다.\n\n정말 삭제하려면 아래에 삭제 라고 입력하세요.');
+    if(typed === null) return;            // 취소
+    if(typed.trim() !== '삭제'){
+      toast('입력이 일치하지 않아 삭제를 취소했어요');
+      return;
+    }
+  }
   data.refunds = [];
   save();
   render();
@@ -11296,6 +11429,9 @@ function initAfterLogin(){
     } catch(e){
       console.error('[Firebase] 설정 로드 실패:', e);
     }
+    // ⭐ 설정 로드 완료(실패해도 시도 끝남) — 이제부터 saveSettings() 허용
+    _fbSettingsLoaded = true;
+    console.log('[Firebase] 설정 로드 완료 — 설정 저장 활성화');
     // 2. 환불 데이터 Firebase 로드
     const remoteRefunds = await loadRefundsFromFirebase();
     if(remoteRefunds !== null){
@@ -11328,6 +11464,9 @@ function initAfterLogin(){
     } catch(e){
       console.error('[Firebase] 학생 메모 로드 실패:', e);
     }
+    // ⭐ 학생 메모 로드 완료(실패해도 시도 끝남) — 이제부터 saveStudents() 허용
+    _fbStudentsLoaded = true;
+    console.log('[Firebase] 학생 메모 로드 완료 — 학생 메모 저장 활성화');
     // 4. 옛 refund 데이터 + 설정 마이그레이션
     migrateSettings();
     // ⭐ Firebase 로드 후 — 등록된 직원 전원 비번 자동 보장 (사장님 룰 2026.05.19)
