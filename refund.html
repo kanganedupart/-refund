@@ -2072,13 +2072,13 @@ function saveStaffPasswords(pwMap){
   }
   // ⭐ 안전망 (사장님 룰 2026.05.19) — Firebase 기존 데이터와 병합 후 저장
   // 이유: 다른 PC에서 등록한 직원 비번을 실수로 덮어쓰지 않도록
-  firebase.database().ref('shared/staffPasswords').once('value').then(snap => {
+  firebase.database().ref('refunds_app/staffPasswords').once('value').then(snap => {
     const remote = snap.val();
     const remotePwds = (remote && remote.passwords) ? remote.passwords : {};
     // 병합: 기존 Firebase 비번 + 새로 추가/변경된 비번
     const merged = Object.assign({}, remotePwds, pwMap);
     _staffPwCache = merged;
-    return firebase.database().ref('shared/staffPasswords').set({
+    return firebase.database().ref('refunds_app/staffPasswords').set({
       passwords: merged,
       updatedAt: Date.now()
     });
@@ -2092,7 +2092,7 @@ function saveStaffPasswords(pwMap){
 async function loadStaffPasswordsFromFirebase(){
   if(typeof firebase === 'undefined' || !firebase.database) return;
   try {
-    const snap = await firebase.database().ref('shared/staffPasswords').once('value');
+    const snap = await firebase.database().ref('refunds_app/staffPasswords').once('value');
     const remote = snap.val();
     if(remote && remote.passwords){
       _staffPwCache = remote.passwords;
@@ -2116,7 +2116,7 @@ async function loadStaffPasswordsFromFirebase(){
         if(migrated > 0){
           console.log('[마이그레이션] localStorage → Firebase 비번 ' + migrated + '명 옮김');
           // Firebase로 업로드 (saveStaffPasswords가 이미 Firebase 저장 처리)
-          firebase.database().ref('shared/staffPasswords').set({
+          firebase.database().ref('refunds_app/staffPasswords').set({
             passwords: _staffPwCache,
             updatedAt: Date.now()
           });
@@ -2475,7 +2475,7 @@ function save(){
   updates['updatedAt'] = _fbLastWriteAt;
 
   // ⭐ update() = 명시한 경로만 갱신. 나머지 환불 건은 Firebase에서 그대로 보존됨.
-  firebase.database().ref('shared/refunds').update(updates).then(() => {
+  firebase.database().ref('refunds_app/refunds').update(updates).then(() => {
     // 저장 성공 → 스냅샷을 현재 상태로 갱신
     _fbRefundSnapshot = cur;
     console.log('[Firebase] 환불 ' + changed + '건 갱신 저장');
@@ -2497,7 +2497,7 @@ function save(){
 
 // ⭐ 자동 백업 (2026.05.21)
 //   저장이 성공할 때마다 환불 데이터 전체 사본을 Firebase의 별도 공간에 남긴다.
-//   경로: shared/refundsBackups/{날짜} = { items:{...}, savedAt, count }
+//   경로: refunds_app/refundsBackups/{날짜} = { items:{...}, savedAt, count }
 //   하루 1개(그날 마지막 상태)만 유지, 최근 7일치 보관. 사고 시 되돌릴 수단.
 //   ⚠️ 백업은 별도 경로라서, 실수로 본 데이터를 지워도 여기 사본은 남아있음.
 let _lastBackupDay = '';
@@ -2511,7 +2511,7 @@ function _backupRefunds(){
   const items = {};
   real.forEach(r => { if(r.id != null) items[String(r.id)] = r; });
   // 그날 백업 (하루 여러 번 저장돼도 같은 날짜 키에 덮어써져 1개만 유지)
-  firebase.database().ref('shared/refundsBackups/' + day).set({
+  firebase.database().ref('refunds_app/refundsBackups/' + day).set({
     items: items,
     savedAt: now.toISOString(),
     count: real.length
@@ -2529,7 +2529,7 @@ function _backupRefunds(){
 // 7일보다 오래된 백업 삭제 (공간 절약)
 function _pruneOldBackups(){
   if(typeof firebase === 'undefined' || !firebase.database) return;
-  firebase.database().ref('shared/refundsBackups').once('value').then(snap => {
+  firebase.database().ref('refunds_app/refundsBackups').once('value').then(snap => {
     const all = snap.val();
     if(!all) return;
     const days = Object.keys(all).sort();   // 날짜 오름차순
@@ -2537,7 +2537,7 @@ function _pruneOldBackups(){
     // 가장 오래된 것부터 7개 남기고 삭제
     const toDelete = days.slice(0, days.length - 7);
     toDelete.forEach(d => {
-      firebase.database().ref('shared/refundsBackups/' + d).remove()
+      firebase.database().ref('refunds_app/refundsBackups/' + d).remove()
         .catch(e => console.error('[백업] 오래된 백업 삭제 실패:', e));
     });
     if(toDelete.length > 0){
@@ -2580,7 +2580,7 @@ function startFirebaseSync(){
     return;
   }
   console.log('[Firebase] 환불 데이터 실시간 동기화 시작');
-  firebase.database().ref('shared/refunds').on('value', snap => {
+  firebase.database().ref('refunds_app/refunds').on('value', snap => {
     const remote = snap.val();
     const arr = _parseRemoteRefunds(remote);
     if(arr === null){
@@ -2614,7 +2614,7 @@ function startFirebaseSync(){
 async function loadRefundsFromFirebase(){
   if(typeof firebase === 'undefined' || !firebase.database) return null;
   try {
-    const snap = await firebase.database().ref('shared/refunds').once('value');
+    const snap = await firebase.database().ref('refunds_app/refunds').once('value');
     const remote = snap.val();
     const arr = _parseRemoteRefunds(remote);
     if(arr !== null){
@@ -2624,7 +2624,7 @@ async function loadRefundsFromFirebase(){
         try {
           const items = {};
           arr.forEach(r => { if(r && r.id != null) items[String(r.id)] = r; });
-          await firebase.database().ref('shared/refunds').set({
+          await firebase.database().ref('refunds_app/refunds').set({
             items: items,
             updatedAt: Date.now()
           });
@@ -2658,7 +2658,7 @@ function saveSettings(skipMerge){
     // 삭제 모드: 합집합 X, 통째 저장 (로컬 settings 그대로)
     _fbLastWriteAt = Date.now();  // echo 방지
     console.log('[Firebase] 설정 통째 저장 (skipMerge) - 직원', (settings.staff||[]).length, '명');
-    firebase.database().ref('shared/settings').set({
+    firebase.database().ref('refunds_app/settings').set({
       settings: settings,
       updatedAt: _fbLastWriteAt
     }).then(() => {
@@ -2671,7 +2671,7 @@ function saveSettings(skipMerge){
   }
   // ⭐ 일반 모드: settings.staff(직원 명단)는 Firebase 기존 값과 합집합 (사장님 룰 2026.05.19)
   // 이유: 다른 PC에서 등록한 직원을 실수로 덮어쓰지 않도록
-  firebase.database().ref('shared/settings').once('value').then(snap => {
+  firebase.database().ref('refunds_app/settings').once('value').then(snap => {
     const remote = snap.val();
     const remoteSettings = (remote && remote.settings) ? remote.settings : {};
     const remoteStaff = Array.isArray(remoteSettings.staff) ? remoteSettings.staff : [];
@@ -2685,7 +2685,7 @@ function saveSettings(skipMerge){
     settings.staffRoles = mergedRoles;
     // 저장
     _fbLastWriteAt = Date.now();  // echo 방지
-    return firebase.database().ref('shared/settings').set({
+    return firebase.database().ref('refunds_app/settings').set({
       settings: settings,
       updatedAt: _fbLastWriteAt
     });
@@ -2722,7 +2722,7 @@ function saveStudents(){
     return;
   }
   if(typeof firebase === 'undefined' || !firebase.database) return;
-  firebase.database().ref('shared/refundStudents').set({
+  firebase.database().ref('refunds_app/refundStudents').set({
     students: students,
     updatedAt: Date.now()
   }).catch(err => {
@@ -10147,7 +10147,7 @@ function removeStaff(i){
     const pwMap = Object.assign({}, _staffPwCache);
     delete pwMap[name];
     _staffPwCache = pwMap;
-    firebase.database().ref('shared/staffPasswords').set({
+    firebase.database().ref('refunds_app/staffPasswords').set({
       passwords: pwMap,
       updatedAt: Date.now()
     });
@@ -11413,7 +11413,7 @@ function initAfterLogin(){
   (async () => {
     // 1. 설정 Firebase 로드
     try {
-      const settingsSnap = await firebase.database().ref('shared/settings').once('value');
+      const settingsSnap = await firebase.database().ref('refunds_app/settings').once('value');
       const remoteSettings = settingsSnap.val();
       if(remoteSettings && remoteSettings.settings){
         console.log('[Firebase] 설정 로드');
@@ -11450,7 +11450,7 @@ function initAfterLogin(){
     console.log('[Firebase] 환불 로드 완료 — 저장 활성화');
     // 3. 학생 메모 Firebase 로드
     try {
-      const stuSnap = await firebase.database().ref('shared/refundStudents').once('value');
+      const stuSnap = await firebase.database().ref('refunds_app/refundStudents').once('value');
       const remoteStudents = stuSnap.val();
       if(remoteStudents && remoteStudents.students){
         console.log('[Firebase] 학생 메모 로드');
@@ -11507,7 +11507,7 @@ function initAfterLogin(){
     //   save()는 스냅샷과 비교해 "바뀐 건만" 보내므로, 안 바뀌었으면 아무것도 안 보냄. 안전함.
     save();
     // 6. 설정 실시간 동기화
-    firebase.database().ref('shared/settings').on('value', snap => {
+    firebase.database().ref('refunds_app/settings').on('value', snap => {
       const remote = snap.val();
       if(!remote || !remote.settings) return;
       if(remote.updatedAt && Math.abs(remote.updatedAt - _fbLastWriteAt) < 1000) return;
@@ -11526,7 +11526,7 @@ function initAfterLogin(){
       }
     });
     // 7. 학생 메모 실시간 동기화
-    firebase.database().ref('shared/refundStudents').on('value', snap => {
+    firebase.database().ref('refunds_app/refundStudents').on('value', snap => {
       const remote = snap.val();
       if(!remote || !remote.students) return;
       if(remote.updatedAt && Math.abs(remote.updatedAt - _fbLastWriteAt) < 1000) return;
