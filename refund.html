@@ -2352,27 +2352,118 @@ function autoLoadSample(){
   loadSampleData(true); // silent 모드 (개발용, 자동 호출 안 함)
 }
 
-// ⭐ Firebase 동기화 상태 (사장님 룰 2026.05.19 - 최종)
+// ⭐ Firebase 동기화 상태 (건별 저장 구조 — 2026.05.21 전면 개편)
 // - Firebase 단일 정본. localStorage 사용 안 함.
 // - 모든 직원이 같은 데이터 공유.
+// - ⭐ 핵심 변경: 통째 set() → 건별 update()/remove()
+//   환불 1건을 추가/수정/삭제해도 그 1건만 Firebase에 반영. 나머지는 절대 안 건드림.
+//   → 로딩 중 클릭, 두 PC 동시 사용, 샘플 오주입 등으로 데이터가 통째로 날아갈 수 없음.
 let _fbApplyingRemote = false;    // 원격 변경 적용 중 (재저장 방지)
 let _fbLastWriteAt = 0;           // 마지막 우리 측 저장 시각
+let _fbRefundsLoaded = false;     // ⭐ 환불 데이터 Firebase 첫 로드 완료 여부
+// ⭐ 직전에 Firebase와 일치했던 환불 상태 스냅샷 { id: JSON문자열 }
+//    save() 때 이것과 현재 data.refunds를 비교해 "바뀐 것만" 골라냄.
+let _fbRefundSnapshot = {};
+
+// 환불 배열을 { id: 직렬화문자열 } 맵으로 변환 (비교용)
+// ⭐ _sample 표식이 달린 샘플 데이터는 제외 → Firebase에 절대 안 올라감
+function _snapshotRefunds(list){
+  const m = {};
+  (list || []).forEach(r => {
+    if(r && r.id != null && !r._sample) m[String(r.id)] = JSON.stringify(r);
+  });
+  return m;
+}
+
+// ⭐ 로딩 중 입력 방지 가드 (2026.05.21)
+//   Firebase 첫 로드가 안 끝났는데 추가/완료 등을 하면 save()가 보류되어
+//   입력이 저장 안 된 채 사라짐. 그래서 액션 진입점에서 미리 막고 안내.
+//   true 반환 = 막힘(작업 중단해야 함), false = 진행 가능
+function _blockIfNotLoaded(){
+  if(!_fbRefundsLoaded){
+    toast('⏳ 데이터 불러오는 중입니다. 2~3초 후 다시 시도해주세요');
+    return true;
+  }
+  return false;
+}
 
 function save(){
-  // ⭐ Firebase 단일 저장 (즉시, 디바운싱 X)
-  if(_fbApplyingRemote) return;   // 원격에서 받은 데이터 적용 중이면 재저장 안 함
+  // ⭐ 안전장치 1: 원격 데이터 적용 중이면 저장 안 함
+  if(_fbApplyingRemote) return;
+  // ⭐ 안전장치 2: Firebase 첫 로드 끝나기 전엔 절대 저장 안 함
+  //   이유: 켜자마자 빈/불완전 data.refunds가 Firebase를 건드리는 사고 방지
+  if(!_fbRefundsLoaded){
+    console.warn('[Firebase] 아직 로드 전 — 저장 보류 (데이터 보호)');
+    return;
+  }
   if(typeof firebase === 'undefined' || !firebase.database){
     console.error('[Firebase] 라이브러리 없음 - 저장 실패!');
     return;
   }
+
+  // ⭐ 현재 상태 vs 직전 스냅샷 비교 → 바뀐 것만 추려냄
+  const cur = _snapshotRefunds(data.refunds);
+  const updates = {};   // Firebase update() 에 넘길 객체. {경로: 값 또는 null}
+  let changed = 0;
+
+  // (1) 추가됐거나 내용이 바뀐 환불 → 해당 id 경로에만 기록
+  Object.keys(cur).forEach(id => {
+    if(cur[id] !== _fbRefundSnapshot[id]){
+      updates['items/' + id] = JSON.parse(cur[id]);
+      changed++;
+    }
+  });
+  // (2) 직전엔 있었는데 지금 사라진 환불 → 해당 id 경로를 null 로 (= 삭제)
+  Object.keys(_fbRefundSnapshot).forEach(id => {
+    if(!(id in cur)){
+      updates['items/' + id] = null;
+      changed++;
+    }
+  });
+
+  if(changed === 0){
+    // 바뀐 게 없으면 Firebase에 아무것도 안 보냄
+    return;
+  }
+
   _fbLastWriteAt = Date.now();
-  firebase.database().ref('shared/refunds').set({
-    refunds: data.refunds || [],
-    updatedAt: _fbLastWriteAt
+  updates['updatedAt'] = _fbLastWriteAt;
+
+  // ⭐ update() = 명시한 경로만 갱신. 나머지 환불 건은 Firebase에서 그대로 보존됨.
+  firebase.database().ref('shared/refunds').update(updates).then(() => {
+    // 저장 성공 → 스냅샷을 현재 상태로 갱신
+    _fbRefundSnapshot = cur;
+    console.log('[Firebase] 환불 ' + changed + '건 갱신 저장');
   }).catch(err => {
     console.error('[Firebase] 환불 저장 실패:', err);
     toast('⚠️ 저장 실패: 인터넷 연결 확인');
   });
+}
+
+// ⭐ Firebase 원격 데이터 → 환불 배열 변환
+//    새 구조: { items: { id1:{...}, id2:{...} }, updatedAt }
+//    옛 구조: { refunds: [ {...}, {...} ], updatedAt }  ← 자동 호환
+//    반환: 환불 배열 (없으면 null)
+function _parseRemoteRefunds(remote){
+  if(!remote) return null;
+  // 새 구조 (객체 맵)
+  if(remote.items && typeof remote.items === 'object'){
+    const arr = [];
+    Object.keys(remote.items).forEach(id => {
+      const r = remote.items[id];
+      if(r && typeof r === 'object') arr.push(r);
+    });
+    return arr;
+  }
+  // 옛 구조 (배열) — 마이그레이션 호환
+  if(Array.isArray(remote.refunds)){
+    return remote.refunds.slice();
+  }
+  // refunds가 객체로 저장돼 있는 옛 케이스도 방어
+  if(remote.refunds && typeof remote.refunds === 'object'){
+    return Object.keys(remote.refunds).map(k => remote.refunds[k]).filter(x => x && typeof x === 'object');
+  }
+  return null;
 }
 
 // ⭐ Firebase 실시간 동기화 시작 (페이지 로드 시 1회 호출)
@@ -2384,19 +2475,23 @@ function startFirebaseSync(){
   console.log('[Firebase] 환불 데이터 실시간 동기화 시작');
   firebase.database().ref('shared/refunds').on('value', snap => {
     const remote = snap.val();
-    if(!remote || !remote.refunds){
+    const arr = _parseRemoteRefunds(remote);
+    if(arr === null){
       console.log('[Firebase] 원격 데이터 없음');
       return;
     }
     // 우리가 방금 저장한 거면 무시 (echo 방지)
-    if(remote.updatedAt && Math.abs(remote.updatedAt - _fbLastWriteAt) < 1000){
+    if(remote && remote.updatedAt && Math.abs(remote.updatedAt - _fbLastWriteAt) < 1000){
+      // echo여도 스냅샷은 원격 기준으로 맞춰둠 (이후 비교 정확도 유지)
+      _fbRefundSnapshot = _snapshotRefunds(arr);
       return;
     }
     // 원격 데이터를 우리 데이터로 갱신
-    console.log('[Firebase] 원격 변경 감지, 화면 갱신 (' + remote.refunds.length + '건)');
+    console.log('[Firebase] 원격 변경 감지, 화면 갱신 (' + arr.length + '건)');
     _fbApplyingRemote = true;
     try {
-      data.refunds = remote.refunds || [];
+      data.refunds = arr;
+      _fbRefundSnapshot = _snapshotRefunds(arr);  // ⭐ 스냅샷 동기화
       if(typeof render === 'function'){
         try { render(); } catch(e){ console.error('[Firebase] render 실패:', e); }
       }
@@ -2414,9 +2509,24 @@ async function loadRefundsFromFirebase(){
   try {
     const snap = await firebase.database().ref('shared/refunds').once('value');
     const remote = snap.val();
-    if(remote && remote.refunds){
-      console.log('[Firebase] 환불 데이터 ' + remote.refunds.length + '건 로드');
-      return remote.refunds;
+    const arr = _parseRemoteRefunds(remote);
+    if(arr !== null){
+      console.log('[Firebase] 환불 데이터 ' + arr.length + '건 로드');
+      // ⭐ 옛 배열 구조였다면 새 객체맵 구조로 1회 이관
+      if(remote && !remote.items && (remote.refunds !== undefined)){
+        try {
+          const items = {};
+          arr.forEach(r => { if(r && r.id != null) items[String(r.id)] = r; });
+          await firebase.database().ref('shared/refunds').set({
+            items: items,
+            updatedAt: Date.now()
+          });
+          console.log('[Firebase] 옛 배열 → 새 건별 구조로 이관 완료');
+        } catch(mErr){
+          console.error('[Firebase] 구조 이관 실패(데이터는 안전):', mErr);
+        }
+      }
+      return arr;
     }
   } catch(e){
     console.error('[Firebase] 첫 로드 실패:', e);
@@ -2433,9 +2543,13 @@ function saveSettings(skipMerge){
   }
   if(skipMerge){
     // 삭제 모드: 합집합 X, 통째 저장 (로컬 settings 그대로)
+    _fbLastWriteAt = Date.now();  // echo 방지
+    console.log('[Firebase] 설정 통째 저장 (skipMerge) - 직원', (settings.staff||[]).length, '명');
     firebase.database().ref('shared/settings').set({
       settings: settings,
-      updatedAt: Date.now()
+      updatedAt: _fbLastWriteAt
+    }).then(() => {
+      console.log('[Firebase] 설정 저장 완료');
     }).catch(err => {
       console.error('[Firebase] 설정 저장 실패:', err);
       toast('⚠️ 설정 저장 실패: 인터넷 확인');
@@ -2457,9 +2571,10 @@ function saveSettings(skipMerge){
     settings.staff = mergedStaff;
     settings.staffRoles = mergedRoles;
     // 저장
+    _fbLastWriteAt = Date.now();  // echo 방지
     return firebase.database().ref('shared/settings').set({
       settings: settings,
-      updatedAt: Date.now()
+      updatedAt: _fbLastWriteAt
     });
   }).then(() => {
     // 저장 후: 모든 직원 비번 자동 보장
@@ -4117,6 +4232,7 @@ function toggleCheck(id){
 // 대기 → [승인] → 총무 확인 단계로
 // ============================================================
 function approveRefund(id){
+  if(_blockIfNotLoaded()) return;
   if(!canApprove()){ 
     toast('관리자/어드민만 승인 가능합니다'); 
     return; 
@@ -4137,6 +4253,7 @@ function approveRefund(id){
 
 // 승인 취소 (관리자가 잘못 승인했을 때)
 function unapproveRefund(id){
+  if(_blockIfNotLoaded()) return;
   if(!canApprove()){ return; }
   const r = data.refunds.find(x=>x.id===id);
   if(!r) return;
@@ -4385,6 +4502,7 @@ function closeBfModal(){
 }
 
 function submitBfModal(){
+  if(_blockIfNotLoaded()) return;
   const r = _bfRefund();
   if(!r){ closeBfModal(); return; }
   const mode = _bfMode;
@@ -4472,6 +4590,7 @@ function submitBfModal(){
 }
 
 function bfModalSecondaryAction(){
+  if(_blockIfNotLoaded()) return;
   // reviewFix 모드에서 [다시 반송] 버튼
   if(_bfMode !== 'reviewFix') return;
   // 모드 전환 → newBounce처럼 새 반송 사유 입력
@@ -4512,6 +4631,7 @@ function bfModalSecondaryAction(){
 
 // 확인 취소 (별도 함수 — 모달 안에서만 사용)
 function uncheckRefund(id){
+  if(_blockIfNotLoaded()) return;
   if(!canCheck()){ toast('총무부만 가능해요'); return; }
   const r = data.refunds.find(x=>x.id===id);
   if(!r || !r.checked) return;
@@ -4524,6 +4644,7 @@ function uncheckRefund(id){
 }
 
 function toggleDone(id, v){
+  if(_blockIfNotLoaded()) return;
   const r = data.refunds.find(x=>x.id===id);
   if(!r) return;
   const isCardRecharge = r.method === '카드' && r.recharge && r.recharge.needed;
@@ -4741,6 +4862,7 @@ function renderTransferMode(){
 
 // 한 학생의 무통장 환불 항목 모두 완료처리
 function completeStudentRefunds(idsStr){
+  if(_blockIfNotLoaded()) return;
   const ids = idsStr.split(',');
   const items = ids.map(id => data.refunds.find(r => r.id === id)).filter(Boolean);
   if(items.length === 0) return;
@@ -6241,6 +6363,7 @@ function syncStudentInfo(){
 // ============ 검증 + 저장 ============
 function saveModalAll(){
   if(!modalState){ closeAddModal(); return; }
+  if(_blockIfNotLoaded()) return;   // ⭐ 로딩 전엔 저장 막음 (입력 유실 방지)
   syncStudentInfo();
   // ⭐ 사장님 룰 2026.05.19 — 수정 모드에서 모든 줄 삭제 = 학생 환불 전체 삭제
   // 가장 먼저 처리 (사유·이름 검증 전에)
@@ -6877,6 +7000,7 @@ function setupBulkListeners(){
 setTimeout(setupBulkListeners, 200);
 
 function submitBulkModal(){
+  if(_blockIfNotLoaded()) return;
   if(!bulkState) return;
   // 검증
   if(!bulkState.reason){ toast('환불 사유(퇴반/취소)를 선택하세요'); return; }
@@ -8981,6 +9105,7 @@ function qFocusCell(tr, cellIdx){
 
 // ============ 저장 ============
 function qSubmit(){
+  if(_blockIfNotLoaded()) return;
   if(!qState) return;
   if(!qState.reason){ toast('환불 사유를 선택하세요'); return; }
   if(qState.items.length === 0){ toast('환불 항목을 추가하세요'); return; }
@@ -10568,6 +10693,7 @@ function exportData(filteredOnly){
 }
 
 function archiveDone(){
+  if(_blockIfNotLoaded()) return;
   const done = data.refunds.filter(r=>r.done);
   archive = archive.concat(done);
   data.refunds = data.refunds.filter(r=>!r.done);
@@ -10577,6 +10703,7 @@ function archiveDone(){
 }
 
 function clearAllData(){
+  if(_blockIfNotLoaded()) return;
   data.refunds = [];
   save();
   render();
@@ -10948,6 +11075,7 @@ function loadSampleData(silent){
     
     const r = Object.assign({
       id: uuid(),
+      _sample: true,   // ⭐ 샘플 표식 — save()가 Firebase 저장에서 제외함
       createdAt: new Date(ms).toISOString(),
       done: isAutoComplete,
       doneAt: isAutoComplete ? new Date(ms + 60*1000).toISOString() : null,
@@ -11043,10 +11171,11 @@ function loadSampleData(silent){
     }
   });
   
-  save();
+  // ⭐ 샘플 데이터는 화면에만 표시 — Firebase에 절대 저장 안 함 (2026.05.21)
+  //   이유: 샘플 28건이 save()로 실제 DB의 진짜 데이터를 덮어쓰던 사고 차단.
   render();
   if(!silent) goPage('main');
-  if(!silent) toast(added+'건 샘플 데이터 추가됨 ✓');
+  if(!silent) toast(added+'건 샘플 데이터 추가됨 ✓ (화면 전용 — 저장 안 됨)');
 }
 
 // ============================================================
@@ -11177,6 +11306,12 @@ function initAfterLogin(){
         _fbApplyingRemote = false;
       }
     }
+    // ⭐ 스냅샷 기준선: Firebase에서 막 받은 "마이그레이션 이전" 상태로 잡음.
+    //   이후 마이그레이션이 data.refunds를 바꾸면, 그 차이만 save()가 Firebase에 올림.
+    _fbRefundSnapshot = _snapshotRefunds(data.refunds);
+    // ⭐ 환불 데이터 로드 완료 — 이제부터 save() 허용
+    _fbRefundsLoaded = true;
+    console.log('[Firebase] 환불 로드 완료 — 저장 활성화');
     // 3. 학생 메모 Firebase 로드
     try {
       const stuSnap = await firebase.database().ref('shared/refundStudents').once('value');
@@ -11229,6 +11364,9 @@ function initAfterLogin(){
     rebuildStageSnapshot();
     render();
     console.log('[Firebase] 초기 로드 완료, 환불', data.refunds.length, '건');
+    // ⭐ 마이그레이션이 환불 데이터를 바꿨다면 그 변경분만 Firebase에 반영.
+    //   save()는 스냅샷과 비교해 "바뀐 건만" 보내므로, 안 바뀌었으면 아무것도 안 보냄. 안전함.
+    save();
     // 6. 설정 실시간 동기화
     firebase.database().ref('shared/settings').on('value', snap => {
       const remote = snap.val();
